@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agenthub-langgraph-prototype"
+version = "0.1.0"
+description = "Evidence-first AgentHub analysis workflow prototype using LangGraph"
+requires-python = ">=3.10"
+dependencies = [
+  "langgraph>=0.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[project.scripts]
+agenthub-analyze = "agenthub_analysis.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["agenthub_analysis*"]
+exclude = ["data*", "tests*", "docs*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
