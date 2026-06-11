@@ -32,6 +32,12 @@ class AgentRelevanceHint(BaseModel):
     reason: str
 
 
+class HarnessRelevanceHint(BaseModel):
+    level: AgentRelevanceLevel = AgentRelevanceLevel.UNKNOWN
+    reason: str = "[확인 필요] Harness relevance was not analyzed."
+    confidence: ConfidenceLevel = ConfidenceLevel.UNKNOWN
+
+
 class FollowupHints(BaseModel):
     readme_sections: list[str] = Field(default_factory=list)
     files: list[str] = Field(default_factory=list)
@@ -73,6 +79,9 @@ class RepositorySummary(BaseModel):
             level=AgentRelevanceLevel.UNKNOWN,
             reason="AgentHub relevance was not assessed.",
         )
+    )
+    possible_harness_relevance: HarnessRelevanceHint = Field(
+        default_factory=HarnessRelevanceHint
     )
     followup_hints: FollowupHints = Field(default_factory=FollowupHints)
     summary_basis: SummaryBasis = Field(default_factory=SummaryBasis)

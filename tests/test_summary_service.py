@@ -325,3 +325,25 @@ def test_openai_summary_model_receives_env_file_api_key(tmp_path, monkeypatch):
     assert captured["base_url"] == "https://gms.ssafy.io/gmsapi/api.openai.com/v1"
     assert captured["model"] == "gpt-test-model"
     assert captured["temperature"] == 0
+
+
+def test_repository_summary_includes_possible_harness_relevance_hint():
+    summary_input = RepositorySummaryInput(
+        repository_id="repo-1",
+        full_name="acme/harness",
+        github_url="https://github.com/acme/harness",
+    )
+
+    result = summarize_repository(summary_input)
+
+    assert result.possible_harness_relevance.level == AgentRelevanceLevel.UNKNOWN
+    assert result.possible_harness_relevance.confidence == ConfidenceLevel.UNKNOWN
+    assert "[확인 필요]" in result.possible_harness_relevance.reason
+
+
+def test_summary_prompt_mentions_harness_relevance_rules():
+    prompt = load_summary_prompt()
+
+    assert "possible harness relevance" in prompt.lower()
+    assert "README claims alone must not produce high confidence" in prompt
+    assert "Do not claim source-code confirmation" in prompt

@@ -11,6 +11,7 @@ from agenttrace.agents.summary.schemas import (
     AgentRelevanceLevel,
     ConfidenceLevel,
     FollowupHints,
+    HarnessRelevanceHint,
     RepositorySummary,
     RepositorySummaryInput,
     SummaryBasis,
@@ -86,6 +87,11 @@ def summarize_repository(
             possible_agent_relevance=AgentRelevanceHint(
                 level=AgentRelevanceLevel.UNKNOWN,
                 reason="AgentHub relevance was not assessed because README and description were missing.",
+            ),
+            possible_harness_relevance=HarnessRelevanceHint(
+                level=AgentRelevanceLevel.UNKNOWN,
+                reason="[확인 필요] README and file tree were not available for a harness relevance hint.",
+                confidence=ConfidenceLevel.UNKNOWN,
             ),
             followup_hints=FollowupHints(),
             summary_basis=_summary_basis(summary_input),

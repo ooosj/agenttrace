@@ -19,6 +19,7 @@ Return structured summary data with:
 - apparent target users
 - README-described features
 - possible AgentHub relevance hint
+- possible harness relevance hint
 - README-based follow-up hints
 - summary basis
 - input gaps
@@ -40,6 +41,10 @@ Rules:
 - followup_hints.files and followup_hints.directories must be selected only from the provided file_tree.
 - Do not classify the repository as a confirmed MCP Server, Skill, Eval Harness, or Agent Framework.
 - Only provide a lightweight AgentHub relevance hint based on README and metadata.
+- Provide possible harness relevance only as a lightweight README/metadata/file-tree hint.
+- README claims alone must not produce high confidence harness relevance.
+- Do not claim source-code confirmation, runtime validation, sandbox validation, or permission validation.
+- If harness relevance is unclear, include `[확인 필요]` in the reason.
 - Do not perform final agent type classification.
 - Do not perform risk analysis.
 - Do not claim runtime behavior was validated.
