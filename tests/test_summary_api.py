@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from agenttrace.agents.summary import RepositorySummary, RepositorySummaryInput
 from agenttrace.agents.summary.service import (
     MissingSummaryModelError,
     SummaryGenerationError,
@@ -89,6 +90,84 @@ def test_repository_summary_endpoint_returns_summary(monkeypatch):
     assert body["possible_agent_relevance"]["level"] == "medium"
     assert body["followup_hints"]["files"] == ["examples/client.py"]
     assert body["apparent_target_users"] == ["agent developers", "MCP users"]
+
+
+def test_repository_summary_from_github_url_ingests_repo_before_summarizing(monkeypatch):
+    monkeypatch.setattr(
+        "agenttrace.app.dependencies.build_openai_summary_model",
+        lambda: FakeStructuredSummaryModel(),
+    )
+
+    captured = {}
+
+    def fake_fetch_repo_digest(full_name):
+        captured["full_name"] = full_name
+        return {
+            "repository": {
+                "id": "repo-1",
+                "full_name": "acme/weather-agent",
+                "html_url": "https://github.com/acme/weather-agent",
+                "description": "Weather automation helpers",
+                "topics": ["agent"],
+                "language": "Python",
+            },
+            "readme": "# Weather Agent",
+            "file_tree": ["README.md", "examples/client.py"],
+        }
+
+    def fake_summarize(summary_input, **kwargs):
+        captured["summary_input"] = summary_input
+        captured["model"] = kwargs["model"]
+        return RepositorySummary(
+            repository_id=summary_input.repository_id,
+            full_name=summary_input.full_name,
+            github_url=summary_input.github_url,
+            one_line_summary="Weather Agent appears to provide weather automation tools.",
+            readme_summary="Weather Agent is presented as an MCP-style weather automation project.",
+            summary_status="completed",
+            summary_status_reason="README and metadata provide enough detail for a useful summary.",
+        )
+
+    monkeypatch.setattr(
+        "agenttrace.app.routers.summaries.fetch_repo_digest",
+        fake_fetch_repo_digest,
+    )
+    monkeypatch.setattr(
+        "agenttrace.app.routers.summaries.summarize_repository",
+        fake_summarize,
+    )
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/v1/repository-summaries/from-github-url",
+        json={"github_url": "https://github.com/acme/weather-agent"},
+    )
+
+    assert response.status_code == 200
+    assert captured["full_name"] == "acme/weather-agent"
+    assert captured["model"] is not None
+    assert captured["summary_input"] == RepositorySummaryInput(
+        repository_id="repo-1",
+        full_name="acme/weather-agent",
+        github_url="https://github.com/acme/weather-agent",
+        description="Weather automation helpers",
+        topics=["agent"],
+        primary_language="Python",
+        readme="# Weather Agent",
+        file_tree=["README.md", "examples/client.py"],
+    )
+
+
+def test_repository_summary_from_github_url_rejects_non_github_url():
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/v1/repository-summaries/from-github-url",
+        json={"github_url": "https://example.com/acme/weather-agent"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["error"] == "invalid_github_url"
 
 
 def test_repository_summary_endpoint_maps_missing_model_to_500(monkeypatch):

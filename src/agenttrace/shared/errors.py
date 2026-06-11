@@ -11,3 +11,7 @@ class MissingSummaryModelError(SummaryServiceError):
 
 class SummaryGenerationError(SummaryServiceError):
     """Raised when the LLM summary chain fails."""
+
+
+class RepoIngestError(SummaryServiceError):
+    """Raised when repository ingest data cannot be fetched or normalized."""
