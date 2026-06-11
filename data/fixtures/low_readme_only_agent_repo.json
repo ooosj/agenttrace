@@ -1,0 +1,15 @@
+{
+  "repository_id": "fixture-low-readme-only",
+  "full_name": "acme/agent-marketing-site",
+  "github_url": "https://github.com/acme/agent-marketing-site",
+  "metadata": {
+    "description": "Marketing site that mentions AI agents."
+  },
+  "readme": "This AI agent platform helps teams think about autonomous work.",
+  "file_tree": [
+    {"path": "README.md", "type": "file"},
+    {"path": "docs/overview.md", "type": "file"},
+    {"path": "web/app.py", "type": "file"}
+  ],
+  "selected_files": []
+}

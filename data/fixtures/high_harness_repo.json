@@ -1,0 +1,24 @@
+{
+  "repository_id": "fixture-high-harness",
+  "full_name": "acme/coding-agent-harness",
+  "github_url": "https://github.com/acme/coding-agent-harness",
+  "metadata": {
+    "description": "Coding agent harness with tools, sandbox, permission policies, and memory."
+  },
+  "readme": "Coding Agent Harness provides an agent loop, tool registry, sandboxed workspace, permissions, and memory for autonomous coding tasks.",
+  "file_tree": [
+    {"path": "README.md", "type": "file"},
+    {"path": "src/agent_loop.py", "type": "file"},
+    {"path": "src/tools/registry.py", "type": "file"},
+    {"path": "src/workspace/sandbox.py", "type": "file"},
+    {"path": "src/permissions/policy.py", "type": "file"},
+    {"path": "src/memory/context.py", "type": "file"},
+    {"path": "tests/test_tool_execution.py", "type": "file"}
+  ],
+  "selected_files": [
+    {
+      "path": "src/agent_loop.py",
+      "content": "while step < max_iterations:\n    next_action = planner.run_step(state)\n    invoke_tool(next_action)"
+    }
+  ]
+}

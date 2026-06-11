@@ -1,5 +1,16 @@
+import json
+from pathlib import Path
+
 from agenttrace.agents.analysis.nodes.harness_analyzer import harness_analyzer
 from agenttrace.agents.analysis.graph import build_graph
+
+
+FIXTURE_DIR = Path(__file__).resolve().parents[1] / "data" / "fixtures"
+
+
+def _load_fixture(name: str) -> dict:
+    with (FIXTURE_DIR / name).open() as fixture:
+        return json.load(fixture)
 
 
 def test_harness_analyzer_detects_high_relevance_from_static_structure():
@@ -106,3 +117,31 @@ def test_analysis_graph_persists_harness_fields():
     assert persisted["harness_relevance"]["level"] in {"medium", "high"}
     assert persisted["harness_capabilities"]["agent_loop"]["present"] is True
     assert "followup_questions" in persisted
+
+
+def test_high_harness_fixture_expected_output():
+    result = harness_analyzer(_load_fixture("high_harness_repo.json"))
+
+    assert result["harness_relevance"]["level"] == "high"
+    assert result["harness_capabilities"]["agent_loop"]["present"] is True
+    assert result["harness_capabilities"]["tool_system"]["present"] is True
+    assert result["harness_capabilities"]["permission_control"]["present"] is True
+    assert result["harness_capabilities"]["sandbox_or_workspace"]["present"] is True
+
+
+def test_medium_skill_or_mcp_fixture_expected_output():
+    result = harness_analyzer(_load_fixture("medium_skill_or_mcp_repo.json"))
+
+    assert result["harness_relevance"]["level"] == "medium"
+    assert result["harness_capabilities"]["tool_system"]["present"] is True
+    assert result["harness_capabilities"]["skill_system"]["present"] is True
+    assert result["harness_capabilities"]["agent_loop"]["present"] is False
+
+
+def test_low_readme_only_fixture_expected_output():
+    result = harness_analyzer(_load_fixture("low_readme_only_agent_repo.json"))
+
+    assert result["harness_relevance"]["level"] in {"low", "none"}
+    assert result["harness_capabilities"]["agent_loop"]["present"] is False
+    assert result["harness_capabilities"]["tool_system"]["present"] is False
+    assert result["negative_evidence"]

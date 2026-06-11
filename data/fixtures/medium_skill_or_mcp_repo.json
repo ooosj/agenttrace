@@ -1,0 +1,17 @@
+{
+  "repository_id": "fixture-medium-mcp-skill",
+  "full_name": "acme/weather-mcp-skills",
+  "github_url": "https://github.com/acme/weather-mcp-skills",
+  "metadata": {
+    "description": "MCP server and reusable skill pack for weather tools."
+  },
+  "readme": "This repository ships an MCP server and reusable agent skills for weather lookup.",
+  "file_tree": [
+    {"path": "README.md", "type": "file"},
+    {"path": "server.py", "type": "file"},
+    {"path": "tools/weather.py", "type": "file"},
+    {"path": "skills/weather/SKILL.md", "type": "file"},
+    {"path": "mcp.json", "type": "file"}
+  ],
+  "selected_files": []
+}
