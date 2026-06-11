@@ -21,6 +21,8 @@ def route_after_collect(state: AnalysisState) -> Literal["analyzer", "persist_an
 
 
 def route_after_analyzer(state: AnalysisState) -> Literal["evidence_scout", "persist_analysis"]:
+    if state.get("status") == "OUT_OF_SCOPE" and state.get("selected_files"):
+        return "evidence_scout"
     if state.get("status") in {"OUT_OF_SCOPE", "INSUFFICIENT_EVIDENCE"}:
         return "persist_analysis"
     return "evidence_scout"

@@ -120,6 +120,62 @@ def test_analysis_graph_persists_harness_fields():
     assert "followup_questions" in persisted
 
 
+def test_analysis_graph_uses_snapshot_selected_files_for_source_evidence():
+    graph = build_graph()
+    result = graph.invoke(
+        {
+            "run_id": "run-selected-files",
+            "repository_id": "repo-selected-files",
+            "full_name": "acme/source-snippets",
+            "github_url": "https://github.com/acme/source-snippets",
+            "trigger": "MANUAL",
+            "repository_snapshot": {
+                "repository_id": "repo-selected-files",
+                "full_name": "acme/source-snippets",
+                "github_url": "https://github.com/acme/source-snippets",
+                "metadata": {},
+                "readme": "Minimal repo with source snippets.",
+                "file_tree": [{"path": "README.md", "type": "file"}],
+                "selected_files": [
+                    {
+                        "path": "src/agent_loop.py",
+                        "content": (
+                            "while step < max_iterations:\n"
+                            "    next_action = planner.run_step(state)\n"
+                            "    invoke_tool(next_action)"
+                        ),
+                    }
+                ],
+            },
+        }
+    )
+
+    persisted = result["persisted_analysis"]
+    assert persisted["harness_capabilities"]["agent_loop"]["present"] is True
+    assert any(
+        item["type"] == "source_code" and "agent_loop" in item["supports"]
+        for item in persisted["harness_relevance"]["evidence"]
+    )
+
+
+def test_harness_analyzer_does_not_mark_generic_path_only_layout_high():
+    state = {
+        "readme": "Generic automation utilities.",
+        "file_tree": [
+            {"path": "workflow/graph.py", "type": "file"},
+            {"path": "tools/reporting.py", "type": "file"},
+            {"path": "workspace/models.py", "type": "file"},
+            {"path": "policy/rules.py", "type": "file"},
+        ],
+        "selected_files": [],
+        "evidence_signals": [],
+    }
+
+    result = harness_analyzer(state)
+
+    assert result["harness_relevance"]["level"] != "high"
+
+
 def test_high_harness_fixture_expected_output():
     result = harness_analyzer(_load_fixture("high_harness_repo.json"))
 

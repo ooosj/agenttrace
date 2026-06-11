@@ -52,9 +52,28 @@ def _confidence_for(path_hits: int, code_hits: int) -> str:
     return "low"
 
 
-def _level_for(present_capabilities: set[str], readme_mentions_harness: bool) -> tuple[str, str]:
+EXPLICIT_HARNESS_README_PHRASES = [
+    "agent harness",
+    "coding agent",
+    "agent loop",
+    "autonomous coding",
+    "tool registry",
+    "sandboxed workspace",
+]
+
+
+def _level_for(
+    present_capabilities: set[str],
+    readme_mentions_harness: bool,
+    has_source_code_evidence: bool,
+    has_explicit_harness_readme: bool,
+) -> tuple[str, str]:
     core_hits = present_capabilities & CORE_HIGH_RELEVANCE_CAPABILITIES
-    if {"agent_loop", "tool_system"} <= present_capabilities and len(core_hits) >= 3:
+    if (
+        {"agent_loop", "tool_system"} <= present_capabilities
+        and len(core_hits) >= 3
+        and (has_source_code_evidence or has_explicit_harness_readme)
+    ):
         return "high", "high"
     if "tool_system" in present_capabilities or "skill_system" in present_capabilities:
         return "medium", "medium"
@@ -72,10 +91,14 @@ def harness_analyzer(state: AnalysisState) -> AnalysisState:
         word in readme_lower
         for word in ["agent", "harness", "tool", "sandbox", "permission", "skill", "mcp"]
     )
+    has_explicit_harness_readme = any(
+        phrase in readme_lower for phrase in EXPLICIT_HARNESS_README_PHRASES
+    )
 
     capabilities: dict[str, dict] = {}
     evidence: list[dict] = []
     present_capabilities: set[str] = set()
+    has_source_code_evidence = False
 
     for name in HARNESS_CAPABILITY_NAMES:
         criteria = HARNESS_CAPABILITY_CRITERIA[name]
@@ -106,6 +129,7 @@ def harness_analyzer(state: AnalysisState) -> AnalysisState:
             )
             capability_evidence.append(summary)
         for path in code_hits[:2]:
+            has_source_code_evidence = True
             location = path or "selected_files"
             summary = f"Selected source snippet contains code signal for {name}: {location}"
             evidence.append(
@@ -124,7 +148,12 @@ def harness_analyzer(state: AnalysisState) -> AnalysisState:
             "evidence": capability_evidence,
         }
 
-    level, confidence = _level_for(present_capabilities, readme_mentions_harness)
+    level, confidence = _level_for(
+        present_capabilities,
+        readme_mentions_harness,
+        has_source_code_evidence,
+        has_explicit_harness_readme,
+    )
     negative_evidence = []
     if readme_mentions_harness and not present_capabilities:
         negative_evidence.append(
