@@ -1,0 +1,173 @@
+from __future__ import annotations
+
+from agenttrace.agents.analysis.criteria.harness_capabilities import (
+    CORE_HIGH_RELEVANCE_CAPABILITIES,
+    HARNESS_CAPABILITY_CRITERIA,
+    HARNESS_CAPABILITY_NAMES,
+)
+from agenttrace.agents.analysis.state import AnalysisState
+
+
+def _path_text(state: AnalysisState) -> list[str]:
+    paths: list[str] = []
+    for item in state.get("file_tree", []):
+        path = item.get("path") if isinstance(item, dict) else None
+        if path:
+            paths.append(path)
+    for item in state.get("evidence_signals", []):
+        path = item.get("path") if isinstance(item, dict) else None
+        if path:
+            paths.append(path)
+    return paths
+
+
+def _selected_source_text(state: AnalysisState) -> list[tuple[str, str]]:
+    selected: list[tuple[str, str]] = []
+    for item in state.get("selected_files", []):
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path") or "")
+        content = str(item.get("content") or item.get("text") or "")
+        if path or content:
+            selected.append((path, content))
+    return selected
+
+
+def _evidence_type(path: str) -> str:
+    lowered = path.lower()
+    if "test" in lowered:
+        return "test"
+    if lowered.endswith((".json", ".toml", ".yaml", ".yml")):
+        return "config"
+    if lowered.endswith((".md", ".mdx", ".rst")):
+        return "docs"
+    return "file_path"
+
+
+def _confidence_for(path_hits: int, code_hits: int) -> str:
+    if code_hits > 0 and path_hits > 0:
+        return "high"
+    if path_hits > 0:
+        return "medium"
+    return "low"
+
+
+def _level_for(present_capabilities: set[str], readme_mentions_harness: bool) -> tuple[str, str]:
+    core_hits = present_capabilities & CORE_HIGH_RELEVANCE_CAPABILITIES
+    if {"agent_loop", "tool_system"} <= present_capabilities and len(core_hits) >= 3:
+        return "high", "high"
+    if "tool_system" in present_capabilities or "skill_system" in present_capabilities:
+        return "medium", "medium"
+    if present_capabilities or readme_mentions_harness:
+        return "low", "low"
+    return "none", "medium"
+
+
+def harness_analyzer(state: AnalysisState) -> AnalysisState:
+    paths = _path_text(state)
+    sources = _selected_source_text(state)
+    readme = state.get("readme", "")
+    readme_lower = readme.lower()
+    readme_mentions_harness = any(
+        word in readme_lower
+        for word in ["agent", "harness", "tool", "sandbox", "permission", "skill", "mcp"]
+    )
+
+    capabilities: dict[str, dict] = {}
+    evidence: list[dict] = []
+    present_capabilities: set[str] = set()
+
+    for name in HARNESS_CAPABILITY_NAMES:
+        criteria = HARNESS_CAPABILITY_CRITERIA[name]
+        path_hits = [
+            path
+            for path in paths
+            if any(keyword.lower() in path.lower() for keyword in criteria["path_keywords"])
+        ]
+        code_hits = [
+            path
+            for path, content in sources
+            if any(keyword.lower() in content.lower() for keyword in criteria["code_keywords"])
+        ]
+        present = bool(path_hits or code_hits)
+        if present:
+            present_capabilities.add(name)
+
+        capability_evidence = []
+        for path in path_hits[:3]:
+            summary = f"Static path signal supports {name}: {path}"
+            evidence.append(
+                {
+                    "type": _evidence_type(path),
+                    "location": path,
+                    "summary": summary,
+                    "supports": [name],
+                }
+            )
+            capability_evidence.append(summary)
+        for path in code_hits[:2]:
+            location = path or "selected_files"
+            summary = f"Selected source snippet contains code signal for {name}: {location}"
+            evidence.append(
+                {
+                    "type": "source_code",
+                    "location": location,
+                    "summary": summary,
+                    "supports": [name],
+                }
+            )
+            capability_evidence.append(summary)
+
+        capabilities[name] = {
+            "present": present,
+            "confidence": _confidence_for(len(path_hits), len(code_hits)),
+            "evidence": capability_evidence,
+        }
+
+    level, confidence = _level_for(present_capabilities, readme_mentions_harness)
+    negative_evidence = []
+    if readme_mentions_harness and not present_capabilities:
+        negative_evidence.append(
+            {
+                "type": "file_path",
+                "location": "file_tree",
+                "summary": "README suggests agent or harness relevance, but available file structure does not show harness capability signals.",
+            }
+        )
+    if "agent_loop" not in present_capabilities:
+        negative_evidence.append(
+            {
+                "type": "file_path",
+                "location": "file_tree",
+                "summary": "No agent loop, executor, runner, workflow, or graph structure was found in available paths.",
+            }
+        )
+
+    followup_questions = []
+    if "agent_loop" not in present_capabilities:
+        followup_questions.append("Does the repository include an executor or agent loop outside the captured file tree?")
+    if "permission_control" not in present_capabilities:
+        followup_questions.append("Does the repository enforce tool permissions, approvals, or command policies?")
+    if "sandbox_or_workspace" not in present_capabilities:
+        followup_questions.append("Does the repository isolate agent actions in a sandbox, workspace, container, or worktree?")
+
+    reason = (
+        f"Harness relevance is {level} based on {len(present_capabilities)} detected capability signals."
+    )
+    if readme_mentions_harness and not evidence:
+        reason += " [확인 필요] README language was not supported by available static evidence."
+
+    harness_relevance = {
+        "level": level,
+        "reason": reason,
+        "confidence": confidence,
+        "evidence": evidence,
+        "negative_evidence": negative_evidence,
+    }
+
+    return {
+        "harness_relevance": harness_relevance,
+        "harness_capabilities": capabilities,
+        "negative_evidence": negative_evidence,
+        "followup_questions": followup_questions,
+    }
