@@ -194,6 +194,24 @@ def test_harness_analyzer_does_not_mark_generic_path_only_layout_high_even_with_
     assert result["harness_relevance"]["level"] != "high"
 
 
+def test_harness_analyzer_does_not_mark_generic_config_path_only_layout_high():
+    result = harness_analyzer(
+        {
+            "readme": "Coding agent harness for autonomous work.",
+            "file_tree": [
+                {"path": "src/runner.py", "type": "file"},
+                {"path": "src/tools/api.py", "type": "file"},
+                {"path": "config/workspace.yaml", "type": "file"},
+                {"path": "config/policy.yaml", "type": "file"},
+            ],
+            "selected_files": [],
+            "evidence_signals": [],
+        }
+    )
+
+    assert result["harness_relevance"]["level"] != "high"
+
+
 def test_high_harness_fixture_expected_output():
     result = harness_analyzer(_load_fixture("high_harness_repo.json"))
 

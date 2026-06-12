@@ -88,13 +88,11 @@ def _level_for(
     readme_mentions_harness: bool,
     has_source_code_evidence: bool,
     has_explicit_harness_readme: bool,
-    has_config_or_test_evidence: bool,
     strong_path_capabilities: set[str],
 ) -> tuple[str, str]:
     core_hits = present_capabilities & CORE_HIGH_RELEVANCE_CAPABILITIES
     has_strong_harness_evidence = (
         has_source_code_evidence
-        or has_config_or_test_evidence
         or len(strong_path_capabilities) >= 2
     )
     if (
@@ -128,7 +126,6 @@ def harness_analyzer(state: AnalysisState) -> AnalysisState:
     evidence: list[dict] = []
     present_capabilities: set[str] = set()
     has_source_code_evidence = False
-    has_config_or_test_evidence = False
     strong_path_capabilities = _strong_harness_path_capabilities(paths)
 
     for name in HARNESS_CAPABILITY_NAMES:
@@ -150,8 +147,6 @@ def harness_analyzer(state: AnalysisState) -> AnalysisState:
         capability_evidence = []
         for path in path_hits[:3]:
             evidence_type = _evidence_type(path)
-            if evidence_type in {"config", "test"}:
-                has_config_or_test_evidence = True
             summary = f"Static path signal supports {name}: {path}"
             evidence.append(
                 {
@@ -187,7 +182,6 @@ def harness_analyzer(state: AnalysisState) -> AnalysisState:
         readme_mentions_harness,
         has_source_code_evidence,
         has_explicit_harness_readme,
-        has_config_or_test_evidence,
         strong_path_capabilities,
     )
     negative_evidence = []
