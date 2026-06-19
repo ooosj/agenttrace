@@ -20,6 +20,11 @@ def collect_snapshot(state: AnalysisState) -> AnalysisState:
     file_tree = snapshot.get("file_tree", []) or []
     selected_files = snapshot.get("selected_files", []) or []
 
+    # Extract repository metadata upfront
+    repository_id = snapshot.get("repository_id", state.get("repository_id", "unknown"))
+    full_name = snapshot.get("full_name", state.get("full_name", "unknown/unknown"))
+    github_url = snapshot.get("github_url", state.get("github_url", ""))
+
     # Extract commit_sha
     commit_sha = state.get("commit_sha") or snapshot.get("commit_sha")
     if not commit_sha and isinstance(metadata, dict):
@@ -29,20 +34,20 @@ def collect_snapshot(state: AnalysisState) -> AnalysisState:
     ingest_api_url = None
     warnings = []
     if commit_sha:
-        full_name = snapshot.get("full_name") or state.get("full_name") or "unknown/unknown"
-        github_url = snapshot.get("github_url") or state.get("github_url") or ""
-
         owner, repo = None, None
-        if full_name and "/" in full_name and full_name != "unknown/unknown":
-            parts = full_name.split("/", 1)
-            owner, repo = parts[0], parts[1]
+        if full_name and full_name != "unknown/unknown":
+            parts = [p for p in full_name.split("/") if p]
+            if len(parts) >= 2:
+                owner = parts[0]
+                repo = "/".join(parts[1:])
         elif github_url:
             try:
                 parsed = urlparse(github_url)
                 if parsed.netloc.lower() == "github.com" or "github.com" in parsed.netloc.lower():
                     path_parts = [p for p in parsed.path.strip("/").split("/") if p]
                     if len(path_parts) >= 2:
-                        owner, repo = path_parts[0], path_parts[1].removesuffix(".git")
+                        owner = path_parts[0]
+                        repo = path_parts[1].removesuffix(".git")
             except Exception:
                 pass
 
@@ -51,9 +56,9 @@ def collect_snapshot(state: AnalysisState) -> AnalysisState:
 
         settings = get_settings()
         base_url = settings.repo_ingest_base_url.rstrip("/")
-        quoted_owner = urllib.parse.quote(owner)
-        quoted_repo = urllib.parse.quote(repo)
-        quoted_commit = urllib.parse.quote(commit_sha)
+        quoted_owner = urllib.parse.quote(owner, safe="")
+        quoted_repo = urllib.parse.quote(repo, safe="")
+        quoted_commit = urllib.parse.quote(commit_sha, safe="")
         ingest_api_url = f"{base_url}/api/{quoted_owner}/{quoted_repo}/commit/{quoted_commit}"
 
         warnings.append("스냅샷 생성 시점의 commit_sha와 실시간 분석 코드가 일치하지 않을 수 있습니다.")
@@ -79,6 +84,9 @@ def collect_snapshot(state: AnalysisState) -> AnalysisState:
 
     if not readme.strip():
         ret = {
+            "repository_id": repository_id,
+            "full_name": full_name,
+            "github_url": github_url,
             "metadata": metadata,
             "readme": readme,
             "file_tree": file_tree,
@@ -94,6 +102,9 @@ def collect_snapshot(state: AnalysisState) -> AnalysisState:
 
     if not file_tree:
         ret = {
+            "repository_id": repository_id,
+            "full_name": full_name,
+            "github_url": github_url,
             "metadata": metadata,
             "readme": readme,
             "file_tree": file_tree,
@@ -108,9 +119,9 @@ def collect_snapshot(state: AnalysisState) -> AnalysisState:
         return ret
 
     ret = {
-        "repository_id": snapshot.get("repository_id", state.get("repository_id", "unknown")),
-        "full_name": snapshot.get("full_name", state.get("full_name", "unknown/unknown")),
-        "github_url": snapshot.get("github_url", state.get("github_url", "")),
+        "repository_id": repository_id,
+        "full_name": full_name,
+        "github_url": github_url,
         "metadata": metadata,
         "readme": readme,
         "file_tree": file_tree,

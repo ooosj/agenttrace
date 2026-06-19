@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from agenttrace.agents.analysis.nodes.analyzer import analyzer
 from agenttrace.agents.analysis.nodes.collect_snapshot import collect_snapshot
@@ -20,7 +21,8 @@ def test_analyzer_detects_mcp_server():
 
 
 def test_analyzer_classifies_superpowers_as_skill():
-    with open("data/superpowers_repo.json") as fixture:
+    path = Path(__file__).parent.parent / "data" / "superpowers_repo.json"
+    with open(path) as fixture:
         state = json.load(fixture)
 
     result = analyzer(state)
@@ -63,7 +65,8 @@ def test_evidence_scout_finds_paths():
 
 
 def test_evidence_scout_links_superpowers_evidence_to_multiple_claims():
-    with open("data/superpowers_repo.json") as fixture:
+    path = Path(__file__).parent.parent / "data" / "superpowers_repo.json"
+    with open(path) as fixture:
         state = json.load(fixture)
 
     analyzed = analyzer(state)
@@ -80,7 +83,8 @@ def test_evidence_scout_links_superpowers_evidence_to_multiple_claims():
 
 
 def test_superpowers_followup_actions_are_user_action_labels():
-    with open("data/superpowers_repo.json") as fixture:
+    path = Path(__file__).parent.parent / "data" / "superpowers_repo.json"
+    with open(path) as fixture:
         state = json.load(fixture)
 
     analyzed = analyzer(state)
