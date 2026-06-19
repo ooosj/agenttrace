@@ -713,3 +713,18 @@ def test_summary_prompt_omits_removed_legacy_fields():
     assert "missing_details" not in prompt
     assert "confidence" not in prompt.lower()
     assert "Do not claim source-code confirmation" in prompt
+
+
+def test_summarize_repository_truncates_readme():
+    request = RepositorySummaryRequest(
+        repository=RepositoryMetadata(
+            full_name="acme/large-readme",
+            github_url="https://github.com/acme/large-readme",
+        ),
+        readme_text="A" * 35000,
+    )
+    model = FakeStructuredSummaryModel()
+    result = summarize_repository(request, model=model)
+
+    assert result.summary_limitations.truncated_inputs == ["README"]
+    assert "[Truncated by AgentTrace before summary generation.]" in request.readme_text

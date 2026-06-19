@@ -69,6 +69,9 @@ def build_summary_prompt_template() -> ChatPromptTemplate:
     )
 
 
+MAX_README_CHARS = 30000
+
+
 def summarize_repository(
     request: RepositorySummaryRequest,
     *,
@@ -76,6 +79,14 @@ def summarize_repository(
 ) -> RepositorySummary:
     model_name = request.options.model_name or get_settings().summary_model
     prompt_version = request.options.prompt_version or SUMMARY_PROMPT_VERSION
+
+    is_readme_truncated = False
+    if request.readme_text and len(request.readme_text) > MAX_README_CHARS:
+        request.readme_text = (
+            request.readme_text[:MAX_README_CHARS]
+            + "\n\n[Truncated by AgentTrace before summary generation.]"
+        )
+        is_readme_truncated = True
 
     if _has_insufficient_context(request):
         return RepositorySummary(
@@ -124,13 +135,18 @@ def summarize_repository(
                 "Repository summary output did not match the schema."
             ) from exc
 
+    guarded_result = _apply_input_guards(
+        result,
+        request,
+        model_name=model_name,
+        prompt_version=prompt_version,
+    )
+    if is_readme_truncated:
+        if "README" not in guarded_result.summary_limitations.truncated_inputs:
+            guarded_result.summary_limitations.truncated_inputs.append("README")
+
     return _constrain_followup_hints(
-        _apply_input_guards(
-            result,
-            request,
-            model_name=model_name,
-            prompt_version=prompt_version,
-        ),
+        guarded_result,
         request,
     )
 
