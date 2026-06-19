@@ -41,6 +41,8 @@ class AnalysisState(TypedDict, total=False):
     repository_id: str
     full_name: str
     github_url: str
+    commit_sha: str
+    ingest_api_url: str
     trigger: Trigger
 
     # Input / collected snapshot
