@@ -1,8 +1,24 @@
 from __future__ import annotations
 
 import re
+import logging
+from pydantic import BaseModel, Field
 from agenttrace.agents.analysis.criteria.agent_type_keywords import AGENT_TYPE_KEYWORDS
 from agenttrace.agents.analysis.state import AnalysisState
+from agenttrace.models import build_openai_summary_model
+from langchain_core.prompts import ChatPromptTemplate
+from agenttrace.config import get_settings
+
+logger = logging.getLogger(__name__)
+
+
+class ExtractedClaim(BaseModel):
+    claim_text: str = Field(description="A specific capability or feature claimed by the repository README.")
+    confidence: float = Field(description="Confidence score between 0.0 and 1.0 of this claim's importance or feasibility.")
+
+
+class ClaimsExtractionResult(BaseModel):
+    claims: list[ExtractedClaim] = Field(description="List of key claims extracted from the README.")
 
 
 def _score_keywords(text: str, keywords: list[str]) -> float:
@@ -55,8 +71,7 @@ def _strip_markdown(text: str) -> str:
 def _extract_claims(readme: str, agent_type: str) -> list[dict]:
     """Extract README claims conservatively.
 
-    LLM 없이 동작하는 MVP라서 문장 단위 휴리스틱으로 claim을 잡습니다.
-    이후 이 함수는 LLM structured output으로 교체할 수 있습니다.
+    LLM 없이 동작하는 MVP용 백업 문장 단위 휴리스틱 매칭입니다.
     """
     claim_markers = [
         "support", "supports", "provide", "provides", "include", "includes",
@@ -103,6 +118,7 @@ def analyzer(state: AnalysisState) -> AnalysisState:
 
     readme = state.get("readme", "")
     file_tree = state.get("file_tree", [])
+    full_name = state.get("full_name", "unknown/unknown")
 
     agent_type, relevance_score, reason = _detect_agent_type(readme, file_tree)
 
@@ -116,7 +132,40 @@ def analyzer(state: AnalysisState) -> AnalysisState:
         }
 
     status = "UNCERTAIN" if agent_type == "UNKNOWN" else "COLLECTED"
-    claims = _extract_claims(readme, agent_type)
+    
+    claims = []
+    settings = get_settings()
+    if settings.openai_api_key:
+        try:
+            model = build_openai_summary_model()
+            structured_model = model.with_structured_output(ClaimsExtractionResult)
+            
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are an expert AI software analyst. Your task is to analyze the README of a repository and extract key functional capabilities, features, or design claims made by the project.\nFocus only on key developer-facing or user-facing features, client/server interfaces, framework plugins, automation workflows, or testing capabilities.\nDo not extract trivial meta-information, badges, or simple installation commands.\nProvide a confidence score for each claim indicating how concrete or significant the claim is."),
+                ("human", "Repository Name: {full_name}\nAgent Type: {agent_type}\n\nREADME Content:\n{readme}")
+            ])
+            
+            prompt_value = prompt.invoke({
+                "full_name": full_name,
+                "agent_type": agent_type,
+                "readme": readme[:30000]
+            })
+            
+            result = structured_model.invoke(prompt_value)
+            for idx, c in enumerate(result.claims):
+                claims.append({
+                    "id": f"claim-{idx + 1}",
+                    "claim_text": c.claim_text[:500],
+                    "claim_type": agent_type,
+                    "source": "README.md",
+                    "confidence": c.confidence,
+                })
+        except Exception as exc:
+            logger.warning(f"LLM claims extraction failed, falling back to heuristic: {exc}")
+            claims = []
+
+    if not claims:
+        claims = _extract_claims(readme, agent_type)
 
     return {
         "status": status,
