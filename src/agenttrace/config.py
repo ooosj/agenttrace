@@ -10,6 +10,7 @@ from pathlib import Path
 class Settings:
     service_name: str = "agenttrace-ai"
     summary_model: str = "gpt-4o-mini"
+    analysis_model: str = "gpt-4o-mini"
     repo_ingest_base_url: str = "https://gitingest.com"
     agents_callback_url: str = "http://localhost:8080/api/v1/internal/analysis/callback"
     repo_ingest_host_header: str | None = None
@@ -28,6 +29,7 @@ def get_settings() -> Settings:
     return Settings(
         service_name=_get_env("AGENTTRACE_SERVICE_NAME", env_values, "agenttrace-ai"),
         summary_model=_get_env("AGENTTRACE_SUMMARY_MODEL", env_values, "gpt-4o-mini"),
+        analysis_model=_get_env("AGENTTRACE_ANALYSIS_MODEL", env_values, "gpt-4o-mini"),
         repo_ingest_base_url=_get_env(
             "AGENTTRACE_REPO_INGEST_BASE_URL",
             env_values,
