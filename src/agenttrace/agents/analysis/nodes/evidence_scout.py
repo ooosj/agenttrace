@@ -29,7 +29,7 @@ def _tokens(text: str) -> set[str]:
 def evidence_scout(state: AnalysisState) -> AnalysisState:
     task = _current_task(state)
     if not task:
-        return {"selected_chunks": [], "search_attempt": {}}
+        return _legacy_evidence_scout(state)
 
     chunk_index = state.get("chunk_index", {})
     entries = chunk_index.get("entries", [])
@@ -76,3 +76,55 @@ def evidence_scout(state: AnalysisState) -> AnalysisState:
         "selected_chunks": selected_chunks,
         "search_attempt": attempt,
     }
+
+
+def _legacy_evidence_scout(state: AnalysisState) -> AnalysisState:
+    claims = state.get("claims", [])
+    file_tree = state.get("file_tree", [])
+    agent_type = state.get("agent_type", "")
+    hints = {
+        "MCP_SERVER": ["mcp", "server", "tool"],
+        "SKILL": ["skill", "plugin", "workflow", "script"],
+        "EVAL_HARNESS": ["eval", "harness", "test", "benchmark"],
+        "AGENT_FRAMEWORK": ["agent", "workflow", "planner", "memory"],
+    }.get(agent_type, ["agent", "tool", "skill", "plugin", "server", "workflow"])
+    signals: list[dict] = []
+    for claim in claims or [{"id": None, "claim_text": ""}]:
+        claim_id = claim.get("id") or claim.get("claim_id")
+        claim_tokens = _tokens(claim.get("claim_text", ""))
+        per_claim = 0
+        for item in file_tree:
+            path = item.get("path", "") if isinstance(item, dict) else str(item)
+            lower = path.lower()
+            if not any(hint in lower for hint in hints) and not (claim_tokens & _tokens(path)):
+                continue
+            signals.append({
+                "claim_id": claim_id,
+                "signal_type": "FILE_PATH",
+                "path": path,
+                "summary": "claim과 연결된 파일 경로 근거",
+                "confidence": 0.7,
+            })
+            per_claim += 1
+            if per_claim >= 3:
+                break
+        if not any("plugin" in signal["path"].lower() for signal in signals if signal["claim_id"] == claim_id):
+            for item in file_tree:
+                path = item.get("path", "") if isinstance(item, dict) else str(item)
+                if "plugin" not in path.lower():
+                    continue
+                signals.append({
+                    "claim_id": claim_id,
+                    "signal_type": "FILE_PATH",
+                    "path": path,
+                    "summary": "claim과 연결된 plugin 파일 경로 근거",
+                    "confidence": 0.7,
+                })
+                break
+    if not signals:
+        return {
+            "status": "INSUFFICIENT_EVIDENCE",
+            "evidence_signals": [],
+            "quality_warnings": ["README claim을 뒷받침할 파일 경로 근거가 부족합니다."],
+        }
+    return {"status": "COLLECTED", "evidence_signals": signals}

@@ -15,6 +15,10 @@ def persist_analysis(state: AnalysisState) -> AnalysisState:
         "analysis_id": state.get("run_id"),
         "status": "COMPLETED",
         "analysis_result": state.get("final_result"),
+        "harness_relevance": state.get("harness_relevance", {}),
+        "harness_capabilities": state.get("harness_capabilities", {}),
+        "negative_evidence": state.get("negative_evidence", []),
+        "followup_questions": state.get("followup_questions", []),
         "trace": {
             "run_id": state.get("run_id"),
             "analysis_version": "analysis-v2",

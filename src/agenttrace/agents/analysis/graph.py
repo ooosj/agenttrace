@@ -14,6 +14,7 @@ from agenttrace.agents.analysis.nodes.evidence_evaluator import evidence_evaluat
 from agenttrace.agents.analysis.nodes.evidence_scout import evidence_scout
 from agenttrace.agents.analysis.nodes.finalize_analysis import finalize_analysis
 from agenttrace.agents.analysis.nodes.finalize_task import finalize_task
+from agenttrace.agents.analysis.nodes.harness_analyzer import harness_analyzer
 from agenttrace.agents.analysis.nodes.persist_analysis import persist_analysis
 from agenttrace.agents.analysis.nodes.quality_gate import quality_gate
 from agenttrace.agents.analysis.nodes.repository_synthesizer import repository_synthesizer
@@ -57,6 +58,7 @@ def build_graph():
     builder.add_node("task_result_merge", task_result_merge)
     builder.add_node("finalize_task", finalize_task)
     builder.add_node("repository_synthesizer", repository_synthesizer)
+    builder.add_node("harness_analyzer", harness_analyzer)
     builder.add_node("risk_and_followup", risk_and_followup)
     builder.add_node("finalize_analysis", finalize_analysis)
     builder.add_node("quality_gate", quality_gate)
@@ -89,7 +91,8 @@ def build_graph():
     builder.add_edge("evidence_evaluator", "task_result_merge")
     builder.add_edge("task_result_merge", "finalize_task")
     builder.add_edge("finalize_task", "select_next_task")
-    builder.add_edge("repository_synthesizer", "risk_and_followup")
+    builder.add_edge("repository_synthesizer", "harness_analyzer")
+    builder.add_edge("harness_analyzer", "risk_and_followup")
     builder.add_edge("risk_and_followup", "finalize_analysis")
     builder.add_edge("finalize_analysis", "quality_gate")
     builder.add_conditional_edges(
