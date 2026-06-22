@@ -36,6 +36,7 @@ exclude = ["data*", "tests*", "docs*"]
 [tool.setuptools.package-data]
 "agenttrace.agents.analysis" = ["prompts/*.md"]
 "agenttrace.agents.summary" = ["prompt.md"]
+"agenttrace.agents.reports" = ["prompt.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
