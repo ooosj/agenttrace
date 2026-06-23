@@ -1,0 +1,20 @@
+name: Deploy AgentHub
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  dispatch-agenthub-deploy:
+    if: github.repository == 'finalyongoh/agenttrace'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch AgentHub backend deployment
+        env:
+          GH_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
+        run: |
+          gh api repos/finalyongoh/agenthub-backend/dispatches \
+            -f event_type=agenttrace-updated \
+            -f "client_payload[agenttrace_sha]=${{ github.sha }}" \
+            -f "client_payload[agenttrace_ref]=${{ github.ref_name }}"
