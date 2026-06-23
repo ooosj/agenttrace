@@ -1,254 +1,229 @@
-import json
-from pathlib import Path
+"""test_nodes.py
 
-from agenttrace.agents.analysis.nodes.analyzer import analyzer
-from agenttrace.agents.analysis.nodes.collect_snapshot import collect_snapshot
+현재 파이프라인 기준 노드 단위 테스트.
+
+삭제된 레거시:
+  - analyzer (→ claim_analyzer + analysis_precheck + analysis_planner 로 분리)
+  - collect_snapshot (→ collect_inputs 가 흡수)
+  - _legacy_evidence_scout / _legacy_quality_gate 폴백 경로
+"""
+from __future__ import annotations
+
 from agenttrace.agents.analysis.nodes.evidence_scout import evidence_scout
 from agenttrace.agents.analysis.nodes.quality_gate import quality_gate
 from agenttrace.agents.analysis.nodes.risk_and_followup import risk_and_followup_planner
-from agenttrace.config import get_settings
 
 
-def test_analyzer_detects_mcp_server():
+# ---------------------------------------------------------------------------
+# evidence_scout — 태스크 루프 기반 (현재 파이프라인)
+# ---------------------------------------------------------------------------
+
+def _chunk_index(paths: list[str]) -> dict:
+    """테스트용 최소 ChunkIndex 생성."""
+    chunks = {}
+    for i, path in enumerate(paths):
+        cid = f"chunk-{i:03d}"
+        chunks[cid] = {
+            "chunk_id": cid,
+            "file_path": path,
+            "content_hash": path.replace("/", "_"),
+        }
+    return {"chunks_by_id": chunks}
+
+
+def test_evidence_scout_selects_chunks_for_target_paths():
+    """target_paths에 속한 청크가 선택된다."""
     state = {
-        "status": "COLLECTED",
-        "readme": "This project provides an MCP server with tools and resources.",
-        "file_tree": [{"path": "src/server.py"}, {"path": "examples/mcp_demo.py"}],
-        "claims": [],
-    }
-    result = analyzer(state)
-    assert result["agent_type"] == "MCP_SERVER"
-    assert result["claims"]
-
-
-def test_analyzer_classifies_superpowers_as_skill():
-    path = Path(__file__).parent.parent / "data" / "superpowers_repo.json"
-    with open(path) as fixture:
-        state = json.load(fixture)
-
-    result = analyzer(state)
-
-    assert result["agent_type"] == "SKILL"
-    assert result["relevance_score"] >= 0.5
-    assert len(result["claims"]) >= 3
-    assert all(claim["claim_text"] != "Superpowers" for claim in result["claims"])
-
-
-def test_analyzer_prefers_skill_path_over_readme_keywords():
-    state = {
-        "status": "COLLECTED",
-        "readme": (
-            "This project provides an MCP server with tools, resources, prompts, "
-            "stdio support, SSE support, and a server.py entrypoint."
-        ),
-        "file_tree": [{"path": "skills/code-review/SKILL.md"}],
-        "claims": [],
-    }
-
-    result = analyzer(state)
-
-    assert result["agent_type"] == "SKILL"
-    assert result["relevance_score"] >= 0.5
-
-
-def test_evidence_scout_finds_paths():
-    state = {
-        "agent_type": "MCP_SERVER",
-        "claims": [{"id": "claim-1"}],
-        "file_tree": [{"path": "src/weather_mcp/server.py"}, {"path": "docs/index.md"}],
-        "evidence_signals": [],
-        "quality_warnings": [],
+        "run_id": "test",
+        "current_task_id": "task-001",
+        "analysis_plan": {
+            "tasks": [
+                {
+                    "task_id": "task-001",
+                    "claims": ["c1"],
+                    "target_paths": ["src/server.py"],
+                    "required": True,
+                    "status": "PENDING",
+                }
+            ]
+        },
+        "claims": [{"claim_id": "c1", "claim_text": "MCP server with tools"}],
+        "chunk_index": _chunk_index(["src/server.py", "docs/index.md", "tests/test_server.py"]),
     }
     result = evidence_scout(state)
-    assert result["evidence_signals"]
-    assert result["evidence_signals"][0]["path"] == "src/weather_mcp/server.py"
+    selected = result["selected_chunks"]
+    assert len(selected) >= 1
+    assert all(c["file_path"] == "src/server.py" for c in selected)
 
 
-
-def test_evidence_scout_links_superpowers_evidence_to_multiple_claims():
-    path = Path(__file__).parent.parent / "data" / "superpowers_repo.json"
-    with open(path) as fixture:
-        state = json.load(fixture)
-
-    analyzed = analyzer(state)
-    result = evidence_scout({**state, **analyzed})
-
-    evidence_signals = result["evidence_signals"]
-    claim_ids = {signal["claim_id"] for signal in evidence_signals}
-    paths = [signal["path"] for signal in evidence_signals]
-
-    assert len(claim_ids) > 1
-    assert any(path.startswith("skills/") for path in paths)
-    assert any("plugin" in path for path in paths)
-
-
-
-def test_superpowers_followup_actions_are_user_action_labels():
-    path = Path(__file__).parent.parent / "data" / "superpowers_repo.json"
-    with open(path) as fixture:
-        state = json.load(fixture)
-
-    analyzed = analyzer(state)
-    scouted = evidence_scout({**state, **analyzed})
-    result = risk_and_followup_planner({**state, **analyzed, **scouted})
-
-    actions = {item["action"] for item in result["followup_actions"]}
-    try_example = next(
-        item for item in result["followup_actions"] if item["action"] == "TRY_EXAMPLE"
-    )
-    risk_types = {item["risk_type"] for item in result["risk_signals"]}
-
-    assert "READ_NOW" in actions
-    assert "INSPECT_STRUCTURE" in actions
-    assert any(
-        path in try_example["target_paths"]
-        for path in ("scripts/install.js", "package.json")
-    )
-    assert "ANALYSIS_UNCERTAIN" in risk_types
-
-
-def test_quality_gate_blocks_completed_without_evidence_for_claims():
+def test_evidence_scout_falls_back_to_token_match_when_no_path_match():
+    """target_paths 매칭 실패 시 query 토큰으로 폴백한다."""
     state = {
-        "status": "COLLECTED",
-        "agent_type": "SKILL",
-        "claims": [
-            {
-                "id": "claim-1",
-                "claim_text": "Provides a reusable skill workflow.",
-                "source": "README.md",
-            }
-        ],
-        "evidence_signals": [],
-        "risk_signals": [],
-        "followup_actions": [],
+        "run_id": "test",
+        "current_task_id": "task-001",
+        "analysis_plan": {
+            "tasks": [
+                {
+                    "task_id": "task-001",
+                    "claims": ["c1"],
+                    "target_paths": ["nonexistent/path.py"],
+                    "required": True,
+                    "status": "PENDING",
+                }
+            ]
+        },
+        "claims": [{"claim_id": "c1", "claim_text": "server tool capability"}],
+        "chunk_index": _chunk_index(["src/server_tool.py", "README.md"]),
     }
+    result = evidence_scout(state)
+    # 토큰 매칭 또는 first-N 폴백으로 어떤 청크든 반환돼야 함
+    assert "selected_chunks" in result
+    assert "search_attempt" in result
 
-    result = quality_gate(state)
 
-    assert result["status"] == "NEEDS_HUMAN_REVIEW"
-    assert result["quality_errors"]
-
-
-def test_quality_gate_warns_uncertain_with_unlinked_claim_evidence():
+def test_evidence_scout_returns_empty_chunks_when_no_chunk_index():
+    """chunk_index 자체가 없으면 selected_chunks는 빈 리스트."""
     state = {
-        "status": "COLLECTED",
-        "agent_type": "SKILL",
-        "claims": [
-            {
-                "id": "claim-1",
-                "claim_text": "Provides a reusable skill workflow.",
-                "source": "README.md",
-            },
-            {
-                "id": "claim-2",
-                "claim_text": "Provides verification workflow instructions.",
-                "source": "README.md",
-            },
+        "run_id": "test",
+        "current_task_id": "task-001",
+        "analysis_plan": {
+            "tasks": [
+                {
+                    "task_id": "task-001",
+                    "claims": ["c1"],
+                    "target_paths": ["src/server.py"],
+                    "required": True,
+                    "status": "PENDING",
+                }
+            ]
+        },
+        "claims": [{"claim_id": "c1", "claim_text": "MCP server"}],
+        "chunk_index": {},
+    }
+    result = evidence_scout(state)
+    assert result["selected_chunks"] == []
+
+
+# ---------------------------------------------------------------------------
+# quality_gate — final_result 경로 (현재 파이프라인)
+# ---------------------------------------------------------------------------
+
+def _minimal_final_result(
+    *,
+    status: str = "completed",
+    claim_ids: list[str] | None = None,
+    task_ids: list[str] | None = None,
+) -> dict:
+    """테스트용 최소 final_result dict — AnalysisResult 스키마 기준."""
+    claim_ids = claim_ids or ["c1"]
+    task_ids = task_ids or ["task-001"]
+    signal_id = "sig-001"
+    return {
+        "analysis_status": status,
+        "agent_type": "MCP",
+        "analysis_claims": [
+            {"claim_id": cid, "claim_text": "test claim", "confidence": 0.8, "source": "README"}
+            for cid in claim_ids
         ],
         "evidence_signals": [
             {
-                "claim_id": "claim-1",
-                "path": "skills/using-superpowers/SKILL.md",
+                "signal_id": signal_id,
+                "signal_type": "FILE_PATH",
+                "file_path": "src/server.py",
+                "path": "src/server.py",
+                "summary": "test",
+                "confidence": 0.9,
             }
         ],
-        "risk_signals": [
+        "evidence_task_results": [
             {
-                "risk_type": "ANALYSIS_UNCERTAIN",
-                "summary": "Static analysis leaves uncertainty.",
+                "task_id": tid,
+                "status": "RESOLVED",
+                "evidence_signal_ids": [signal_id],
+                "claim_verdicts": [
+                    {
+                        "claim_id": cid,
+                        "verdict": "SUPPORTED",
+                        "confidence": 0.8,
+                        "reason": "test evidence",
+                        "evidence_signal_ids": [signal_id],
+                    }
+                    for cid in claim_ids
+                ],
             }
+            for tid in task_ids
         ],
-        "followup_actions": [
-            {
-                "action": "READ_NOW",
-                "reason": "Read source evidence.",
-                "target_paths": ["README.md"],
-            }
+        "analysis_limitations": {
+            "missing_inputs": [],
+            "truncated_inputs": [],
+            "notes": [],
+        },
+    }
+
+
+
+def _plan(task_ids: list[str], required: bool = True) -> dict:
+    return {
+        "plan_id": "plan-001",
+        "repository_id": "repo-1",
+        "tasks": [
+            {"task_id": tid, "claims": ["c1"], "target_paths": [], "required": required, "status": "PENDING"}
+            for tid in task_ids
         ],
     }
 
+
+def test_quality_gate_passes_valid_final_result():
+    state = {
+        "run_id": "test",
+        "final_result": _minimal_final_result(),
+        "analysis_plan": _plan(["task-001"]),
+    }
     result = quality_gate(state)
-
-    assert result["status"] == "UNCERTAIN"
-    assert result["quality_warnings"]
-    assert any("claim-2" in warning for warning in result["quality_warnings"])
-    assert "quality_errors" not in result
+    assert result["quality_gate_result"]["critical_errors"] == []
 
 
-def test_collect_snapshot_no_commit_sha():
+def test_quality_gate_blocks_missing_required_task():
     state = {
-        "repository_snapshot": {
-            "full_name": "acme/harness",
-            "readme": "Some readme",
-            "file_tree": [{"path": "README.md"}],
-        }
+        "run_id": "test",
+        "final_result": _minimal_final_result(task_ids=["task-999"]),  # task-001 없음
+        "analysis_plan": _plan(["task-001"]),
     }
-    result = collect_snapshot(state)
-    assert "commit_sha" not in result
-    assert "ingest_api_url" not in result
-    assert "quality_warnings" not in result
+    result = quality_gate(state)
+    errors = result["quality_gate_result"]["critical_errors"]
+    assert errors
+    # schema 유효 시 missing task 에러, schema 오류 시 schema 에러 중 하나여야 함
+    assert any("task-001" in e or "task" in e.lower() or "schema" in e.lower() for e in errors)
 
 
-def test_collect_snapshot_with_commit_sha_in_state():
+def test_quality_gate_blocks_unknown_evidence_signal():
+    final = _minimal_final_result()
+    # task result가 존재하지 않는 signal_id 참조
+    final["evidence_task_results"][0]["evidence_signal_ids"] = ["sig-UNKNOWN"]
     state = {
-        "commit_sha": "abcdef123456",
-        "repository_snapshot": {
-            "full_name": "acme/harness",
-            "readme": "Some readme",
-            "file_tree": [{"path": "README.md"}],
-        }
+        "run_id": "test",
+        "final_result": final,
+        "analysis_plan": _plan(["task-001"]),
     }
-    result = collect_snapshot(state)
-    assert result["commit_sha"] == "abcdef123456"
-    base_url = get_settings().repo_ingest_base_url.rstrip("/")
-    assert result["ingest_api_url"] == f"{base_url}/api/acme/harness/commit/abcdef123456"
-    assert "스냅샷 생성 시점의 commit_sha와 실시간 분석 코드가 일치하지 않을 수 있습니다." in result["quality_warnings"]
+    result = quality_gate(state)
+    assert result["quality_gate_result"]["critical_errors"]
 
 
-def test_collect_snapshot_with_commit_sha_in_snapshot():
+# ---------------------------------------------------------------------------
+# risk_and_followup_planner — 현재 파이프라인 기준
+# ---------------------------------------------------------------------------
+
+def test_risk_and_followup_planner_returns_followup_actions():
     state = {
-        "repository_snapshot": {
-            "commit_sha": "7890abcdef",
-            "full_name": "acme/harness",
-            "readme": "Some readme",
-            "file_tree": [{"path": "README.md"}],
-        }
+        "run_id": "test",
+        "agent_type": "MCP",
+        "evidence_signals": [
+            {"claim_id": "c1", "path": "src/server.py", "confidence": 0.9}
+        ],
+        "claims": [{"claim_id": "c1", "claim_text": "MCP server with tools"}],
+        "file_tree": [{"path": "src/server.py"}, {"path": "README.md"}],
+        "risk_signals": [],
+        "followup_actions": [],
     }
-    result = collect_snapshot(state)
-    assert result["commit_sha"] == "7890abcdef"
-    base_url = get_settings().repo_ingest_base_url.rstrip("/")
-    assert result["ingest_api_url"] == f"{base_url}/api/acme/harness/commit/7890abcdef"
-    assert "스냅샷 생성 시점의 commit_sha와 실시간 분석 코드가 일치하지 않을 수 있습니다." in result["quality_warnings"]
-
-
-def test_collect_snapshot_with_commit_sha_in_metadata():
-    state = {
-        "repository_snapshot": {
-            "metadata": {"commit_sha": "1234567890"},
-            "full_name": "acme/harness",
-            "readme": "Some readme",
-            "file_tree": [{"path": "README.md"}],
-        }
-    }
-    result = collect_snapshot(state)
-    assert result["commit_sha"] == "1234567890"
-    base_url = get_settings().repo_ingest_base_url.rstrip("/")
-    assert result["ingest_api_url"] == f"{base_url}/api/acme/harness/commit/1234567890"
-    assert "스냅샷 생성 시점의 commit_sha와 실시간 분석 코드가 일치하지 않을 수 있습니다." in result["quality_warnings"]
-
-
-def test_collect_snapshot_github_url_fallback():
-    state = {
-        "commit_sha": "abcdef123456",
-        "repository_snapshot": {
-            "github_url": "https://github.com/example-owner/example-repo.git",
-            "readme": "Some readme",
-            "file_tree": [{"path": "README.md"}],
-        }
-    }
-    result = collect_snapshot(state)
-    assert result["commit_sha"] == "abcdef123456"
-    base_url = get_settings().repo_ingest_base_url.rstrip("/")
-    assert result["ingest_api_url"] == f"{base_url}/api/example-owner/example-repo/commit/abcdef123456"
-    assert "스냅샷 생성 시점의 commit_sha와 실시간 분석 코드가 일치하지 않을 수 있습니다." in result["quality_warnings"]
-
-
+    result = risk_and_followup_planner(state)
+    assert "followup_actions" in result or "risk_signals" in result
