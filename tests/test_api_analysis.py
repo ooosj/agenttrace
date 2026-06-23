@@ -119,6 +119,211 @@ def test_analysis_api_accepts_v2_backend_payload(monkeypatch) -> None:
     assert captured["req"].repository["full_name"] == "owner/repo"
 
 
+def test_repository_analysis_trigger_returns_camel_case_polling_contract(monkeypatch) -> None:
+    active_analyses.clear()
+    captured = {}
+
+    async def fake_run(req):
+        captured["req"] = req
+        active_analyses.discard(str(req.analysis_id))
+
+    monkeypatch.setattr("agenttrace.api.analysis.run_pipeline_async", fake_run)
+    client = TestClient(create_app())
+    repository_id = str(uuid.uuid4())
+
+    response = client.post(
+        f"/api/v1/repositories/{repository_id}/analysis",
+        json={
+            "snapshotId": str(uuid.uuid4()),
+            "commitSha": "abcdef123456",
+            "githubUrl": "https://github.com/owner/repo",
+        },
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert set(body) == {"jobId", "analysisId", "status", "isCached", "requestedAt"}
+    assert body["jobId"]
+    assert body["analysisId"] is None
+    assert body["status"] == "queued"
+    assert body["isCached"] is False
+    assert str(captured["req"].repository_id) == repository_id
+
+
+def test_repository_analysis_status_returns_job_and_analysis_ids(monkeypatch) -> None:
+    active_analyses.clear()
+
+    async def fake_run(req):
+        active_analyses.discard(str(req.analysis_id))
+
+    monkeypatch.setattr("agenttrace.api.analysis.run_pipeline_async", fake_run)
+    client = TestClient(create_app())
+    repository_id = str(uuid.uuid4())
+    trigger = client.post(
+        f"/api/v1/repositories/{repository_id}/analysis",
+        json={
+            "snapshotId": str(uuid.uuid4()),
+            "commitSha": "abcdef123456",
+            "githubUrl": "https://github.com/owner/repo",
+        },
+    ).json()
+
+    response = client.get(
+        f"/api/v1/repositories/{repository_id}/analysis/status",
+        params={"jobId": trigger["jobId"]},
+    )
+
+    assert response.status_code == 200
+    assert set(response.json()) == {"jobId", "analysisId", "status", "errorMessage", "updatedAt"}
+
+
+def test_repository_analysis_status_completes_after_background_run(monkeypatch) -> None:
+    active_analyses.clear()
+
+    async def fake_run(req):
+        active_analyses.discard(str(req.analysis_id))
+
+    monkeypatch.setattr("agenttrace.api.analysis.run_pipeline_async", fake_run)
+    client = TestClient(create_app())
+    repository_id = str(uuid.uuid4())
+    trigger = client.post(
+        f"/api/v1/repositories/{repository_id}/analysis",
+        json={
+            "snapshotId": str(uuid.uuid4()),
+            "commitSha": "abcdef123456",
+            "githubUrl": "https://github.com/owner/repo",
+        },
+    ).json()
+
+    status_response = client.get(
+        f"/api/v1/repositories/{repository_id}/analysis/status",
+        params={"jobId": trigger["jobId"]},
+    ).json()
+
+    assert status_response["status"] == "completed"
+    assert status_response["analysisId"]
+
+
+def test_repository_analysis_trigger_returns_cached_completed_result(monkeypatch) -> None:
+    active_analyses.clear()
+
+    async def fake_run(req):
+        active_analyses.discard(str(req.analysis_id))
+
+    monkeypatch.setattr("agenttrace.api.analysis.run_pipeline_async", fake_run)
+    client = TestClient(create_app())
+    repository_id = str(uuid.uuid4())
+    payload = {
+        "snapshotId": str(uuid.uuid4()),
+        "commitSha": "abcdef123456",
+        "githubUrl": "https://github.com/owner/repo",
+    }
+
+    first = client.post(f"/api/v1/repositories/{repository_id}/analysis", json=payload).json()
+    second = client.post(f"/api/v1/repositories/{repository_id}/analysis", json=payload).json()
+
+    assert first["isCached"] is False
+    assert second["jobId"] is None
+    assert second["analysisId"]
+    assert second["isCached"] is True
+    assert second["status"] == "completed"
+
+
+def test_repository_analysis_trigger_reuses_existing_running_job(monkeypatch) -> None:
+    active_analyses.clear()
+    captured_tasks = []
+
+    def capture_task(self, func, *args, **kwargs):
+        captured_tasks.append((func, args, kwargs))
+
+    monkeypatch.setattr("fastapi.BackgroundTasks.add_task", capture_task)
+    client = TestClient(create_app())
+    repository_id = str(uuid.uuid4())
+    payload = {
+        "snapshotId": str(uuid.uuid4()),
+        "commitSha": "abcdef123456",
+        "githubUrl": "https://github.com/owner/repo",
+    }
+
+    first = client.post(f"/api/v1/repositories/{repository_id}/analysis", json=payload).json()
+    second = client.post(f"/api/v1/repositories/{repository_id}/analysis", json=payload).json()
+
+    assert second["jobId"] == first["jobId"]
+    assert second["analysisId"] is None
+    assert second["isCached"] is False
+    assert len(captured_tasks) == 1
+
+
+def test_repository_analysis_report_returns_camel_case_markdown_contract(monkeypatch) -> None:
+    active_analyses.clear()
+
+    async def fake_run(req):
+        active_analyses.discard(str(req.analysis_id))
+
+    monkeypatch.setattr("agenttrace.api.analysis.run_pipeline_async", fake_run)
+    client = TestClient(create_app())
+    repository_id = str(uuid.uuid4())
+    trigger = client.post(
+        f"/api/v1/repositories/{repository_id}/analysis",
+        json={
+            "snapshotId": str(uuid.uuid4()),
+            "commitSha": "abcdef123456",
+            "githubUrl": "https://github.com/owner/repo",
+        },
+    ).json()
+
+    response = client.get(
+        f"/api/v1/repositories/{repository_id}/analysis/report",
+        params={"analysisId": trigger["analysisId"] or trigger["jobId"], "lang": "ko"},
+    )
+
+    assert response.status_code == 200
+    assert set(response.json()) == {"analysisId", "lang", "title", "bodyMarkdown", "generatedAt"}
+
+
+def test_repository_analysis_result_returns_structured_camel_case_contract(monkeypatch) -> None:
+    active_analyses.clear()
+
+    async def fake_run(req):
+        active_analyses.discard(str(req.analysis_id))
+
+    monkeypatch.setattr("agenttrace.api.analysis.run_pipeline_async", fake_run)
+    client = TestClient(create_app())
+    repository_id = str(uuid.uuid4())
+    trigger = client.post(
+        f"/api/v1/repositories/{repository_id}/analysis",
+        json={
+            "snapshotId": str(uuid.uuid4()),
+            "commitSha": "abcdef123456",
+            "githubUrl": "https://github.com/owner/repo",
+        },
+    ).json()
+
+    response = client.get(
+        f"/api/v1/repositories/{repository_id}/analysis",
+        params={"analysisId": trigger["analysisId"] or trigger["jobId"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {
+        "analysisId",
+        "repositoryId",
+        "snapshotId",
+        "analysisVersion",
+        "status",
+        "agentType",
+        "techStackSummary",
+        "areaFindings",
+        "evidenceRefs",
+        "reportSections",
+        "analysisLimitations",
+        "analysisCompletedAt",
+    }
+    assert len(body["areaFindings"]) == 8
+    assert len(body["reportSections"]) == 11
+
+
 def test_trigger_analysis_e2e(monkeypatch) -> None:
     active_analyses.clear()
     monkeypatch.setattr("agenttrace.api.analysis.fetch_repo_digest", mock_fetch_repo_digest)

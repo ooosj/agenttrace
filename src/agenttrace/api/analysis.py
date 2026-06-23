@@ -6,11 +6,12 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from pydantic import BaseModel, Field, UUID4
+from pydantic import BaseModel, ConfigDict, Field, UUID4
 
 from agenttrace.agents.analysis.graph import build_graph
 from agenttrace.agents.analysis.schemas.input import AnalysisInputRequest
 from agenttrace.config import get_settings
+from agenttrace.services.analysis_jobs import InMemoryAnalysisJobStore
 from agenttrace.services.repo_ingest import (
     _github_full_name,
     fetch_repo_digest,
@@ -20,7 +21,9 @@ from agenttrace.services.repo_ingest import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
+repository_router = APIRouter(prefix="/api/v1/repositories", tags=["analysis"])
 active_analyses = set()
+analysis_job_store = InMemoryAnalysisJobStore()
 
 
 class AnalysisRequest(BaseModel):
@@ -70,6 +73,46 @@ class AnalysisRequest(BaseModel):
             "source_files": [],
             "external_ingest": {"enabled": False, "provider": "gitingest"},
         })
+
+
+class RepositoryAnalysisTriggerRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    snapshot_id: UUID4 = Field(alias="snapshotId")
+    commit_sha: str = Field(alias="commitSha")
+    github_url: str = Field(alias="githubUrl")
+    analysis_version: str = Field(default="analysis-v2", alias="analysisVersion")
+    source_files: list[dict[str, Any]] = Field(default_factory=list, alias="sourceFiles")
+
+
+class AnalysisTriggerResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str | None = Field(alias="jobId")
+    analysis_id: str | None = Field(alias="analysisId")
+    status: str
+    is_cached: bool = Field(alias="isCached")
+    requested_at: str = Field(alias="requestedAt")
+
+
+class AnalysisStatusResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str = Field(alias="jobId")
+    analysis_id: str | None = Field(alias="analysisId")
+    status: str
+    error_message: str | None = Field(alias="errorMessage")
+    updated_at: str = Field(alias="updatedAt")
+
+
+class AnalysisReportResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    analysis_id: str = Field(alias="analysisId")
+    lang: str
+    title: str
+    body_markdown: str = Field(alias="bodyMarkdown")
+    generated_at: str = Field(alias="generatedAt")
 
 
 def _failure_payload(req: AnalysisRequest, exc: Exception) -> dict[str, Any]:
@@ -203,6 +246,16 @@ async def run_pipeline_async(req: AnalysisRequest) -> None:
         active_analyses.discard(str(req.analysis_id))
 
 
+async def run_repository_pipeline_async(job_id: str, req: AnalysisRequest) -> None:
+    try:
+        await run_pipeline_async(req)
+    except Exception as exc:
+        analysis_job_store.mark_failed(job_id, error_message=str(exc))
+        raise
+    else:
+        analysis_job_store.mark_completed(job_id, status="completed")
+
+
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_analysis(
     request: AnalysisRequest,
@@ -218,3 +271,88 @@ async def trigger_analysis(
 
     background_tasks.add_task(run_pipeline_async, request)
     return {"status": "queued", "message": "Analysis started asynchronously."}
+
+
+@repository_router.post("/{repository_id}/analysis", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_repository_analysis(
+    repository_id: UUID4,
+    request: RepositoryAnalysisTriggerRequest,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
+    requested = analysis_job_store.request_analysis(
+        repository_id=str(repository_id),
+        snapshot_id=str(request.snapshot_id),
+        analysis_version=request.analysis_version,
+    )
+    if requested.is_cached or requested.job_id is None:
+        return AnalysisTriggerResponse(
+            job_id=requested.job_id,
+            analysis_id=requested.analysis_id,
+            status=requested.status,
+            is_cached=requested.is_cached,
+            requested_at=requested.requested_at,
+        ).model_dump(by_alias=True)
+
+    analysis_request = AnalysisRequest(
+        analysis_id=requested.job_id,
+        repository_id=repository_id,
+        snapshot_id=request.snapshot_id,
+        commit_sha=request.commit_sha,
+        github_url=request.github_url,
+        source_files=request.source_files,
+        external_ingest={"enabled": False, "provider": "gitingest"},
+    )
+    if requested.should_start:
+        active_analyses.add(requested.job_id)
+        background_tasks.add_task(run_repository_pipeline_async, requested.job_id, analysis_request)
+    return AnalysisTriggerResponse(
+        job_id=requested.job_id,
+        analysis_id=requested.analysis_id,
+        status=requested.status,
+        is_cached=requested.is_cached,
+        requested_at=requested.requested_at,
+    ).model_dump(by_alias=True)
+
+
+@repository_router.get("/{repository_id}/analysis")
+async def get_repository_analysis(
+    repository_id: UUID4,
+    analysisId: UUID4 | None = None,
+) -> dict[str, Any]:
+    analysis = analysis_job_store.get_analysis(
+        repository_id=str(repository_id),
+        analysis_id=str(analysisId) if analysisId else None,
+    )
+    if not analysis:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis result not found.")
+    return analysis
+
+
+@repository_router.get("/{repository_id}/analysis/status")
+async def get_repository_analysis_status(repository_id: UUID4, jobId: UUID4) -> dict[str, Any]:
+    job = analysis_job_store.get_status(repository_id=str(repository_id), job_id=str(jobId))
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis job not found.")
+    return AnalysisStatusResponse(
+        job_id=job["jobId"],
+        analysis_id=job["analysisId"],
+        status=job["status"],
+        error_message=job["errorMessage"],
+        updated_at=job["updatedAt"],
+    ).model_dump(by_alias=True)
+
+
+@repository_router.get("/{repository_id}/analysis/report")
+async def get_repository_analysis_report(
+    repository_id: UUID4,
+    analysisId: UUID4 | None = None,
+    lang: str = "ko",
+) -> dict[str, Any]:
+    report = analysis_job_store.get_report(
+        repository_id=str(repository_id),
+        analysis_id=str(analysisId) if analysisId else None,
+        lang=lang,
+    )
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis report not found.")
+    return AnalysisReportResponse.model_validate(report).model_dump(by_alias=True)
