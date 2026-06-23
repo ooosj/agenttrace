@@ -87,7 +87,7 @@ def init_database(database_url: str) -> None:
 
     # Define all contract DDLs with fallback for analysis_jobs
     contract_tables = [
-        ("repository_analyses", PostgresRepositoryAnalysisSql.table_contract()),
+        ("agenttrace_repository_analyses", PostgresRepositoryAnalysisSql.table_contract()),
         ("analysis_jobs", """
             CREATE TABLE IF NOT EXISTS analysis_jobs (
                 job_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

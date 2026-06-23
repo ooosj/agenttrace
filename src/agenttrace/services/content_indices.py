@@ -176,7 +176,7 @@ class PostgresAnalysisReportSql:
         return """
             CREATE TABLE analysis_reports (
                 report_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                analysis_id uuid NOT NULL REFERENCES repository_analyses(analysis_id) ON DELETE CASCADE,
+                analysis_id uuid NOT NULL REFERENCES agenttrace_repository_analyses(analysis_id) ON DELETE CASCADE,
                 lang varchar(10) NOT NULL,
                 title varchar(255) NOT NULL,
                 body_markdown text NOT NULL,
@@ -218,7 +218,7 @@ class PostgresRepositoryAnalysisSql:
     @staticmethod
     def table_contract() -> str:
         return """
-            CREATE TABLE repository_analyses (
+            CREATE TABLE agenttrace_repository_analyses (
                 analysis_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
                 repository_id uuid NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
                 snapshot_id uuid NOT NULL REFERENCES repository_snapshots(snapshot_id) ON DELETE CASCADE,
@@ -232,8 +232,8 @@ class PostgresRepositoryAnalysisSql:
                 created_at timestamptz NOT NULL DEFAULT now(),
                 updated_at timestamptz NOT NULL DEFAULT now(),
                 UNIQUE (repository_id, snapshot_id, analysis_version),
-                CONSTRAINT chk_repository_analyses_status CHECK (status IN ('completed', 'completed_with_limitations')),
-                CONSTRAINT chk_repository_analyses_agent_type CHECK (
+                CONSTRAINT chk_agenttrace_repository_analyses_status CHECK (status IN ('completed', 'completed_with_limitations')),
+                CONSTRAINT chk_agenttrace_repository_analyses_agent_type CHECK (
                     agent_type IN ('MCP', 'Skill', 'Eval', 'ToolUse', 'Framework', 'Other', 'Unknown')
                 )
             )
@@ -242,7 +242,7 @@ class PostgresRepositoryAnalysisSql:
     @staticmethod
     def upsert_analysis() -> str:
         return """
-            INSERT INTO repository_analyses (
+            INSERT INTO agenttrace_repository_analyses (
                 analysis_id,
                 repository_id,
                 snapshot_id,

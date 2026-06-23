@@ -148,7 +148,7 @@ class PostgresAnalysisJobSql:
         return {
             "find_completed": """
                 SELECT analysis_id, status
-                FROM repository_analyses
+                FROM agenttrace_repository_analyses
                 WHERE repository_id = %(repository_id)s
                   AND snapshot_id = %(snapshot_id)s
                   AND analysis_version = %(analysis_version)s
@@ -325,13 +325,13 @@ class PostgresAnalysisJobStore:
     def get_analysis(self, *, repository_id: str, analysis_id: str | None) -> dict[str, Any] | None:
         if analysis_id:
             sql = """
-                SELECT * FROM repository_analyses
+                SELECT * FROM agenttrace_repository_analyses
                 WHERE repository_id = %(repository_id)s AND analysis_id = %(analysis_id)s
             """
             params = {"repository_id": repository_id, "analysis_id": analysis_id}
         else:
             sql = """
-                SELECT * FROM repository_analyses
+                SELECT * FROM agenttrace_repository_analyses
                 WHERE repository_id = %(repository_id)s
                 ORDER BY analysis_completed_at DESC NULLS LAST, created_at DESC
                 LIMIT 1
@@ -359,7 +359,7 @@ class PostgresAnalysisJobStore:
             sql = """
                 SELECT r.*, a.analysis_id
                 FROM analysis_reports r
-                JOIN repository_analyses a ON r.analysis_id = a.analysis_id
+                JOIN agenttrace_repository_analyses a ON r.analysis_id = a.analysis_id
                 WHERE a.repository_id = %(repository_id)s 
                   AND a.analysis_id = %(analysis_id)s
                   AND r.lang = %(lang)s
@@ -369,7 +369,7 @@ class PostgresAnalysisJobStore:
             sql = """
                 SELECT r.*, a.analysis_id
                 FROM analysis_reports r
-                JOIN repository_analyses a ON r.analysis_id = a.analysis_id
+                JOIN agenttrace_repository_analyses a ON r.analysis_id = a.analysis_id
                 WHERE a.repository_id = %(repository_id)s 
                   AND r.lang = %(lang)s
                 ORDER BY r.updated_at DESC, r.created_at DESC
