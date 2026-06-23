@@ -1,12 +1,60 @@
 from __future__ import annotations
 
+import re
 import time
 
-from agenttrace.agents.analysis.schemas.result import AnalysisResult, COMMON_ANALYSIS_AREAS
+from pydantic import BaseModel, Field
+
+from agenttrace.agents.analysis.schemas.result import (
+    AnalysisResult,
+    AreaFinding,
+    COMMON_ANALYSIS_AREAS,
+    EvidenceRef,
+    ReportSection,
+)
 from agenttrace.agents.analysis.state import AnalysisState
 from agenttrace.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+class BatchAnalysisResult(BaseModel):
+    area_findings: list[AreaFinding] = Field(default_factory=list)
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+
+
+class ReportSynthesisResult(BaseModel):
+    report_sections: list[ReportSection] = Field(default_factory=list)
+
+
+def validate_mermaid_syntax(mermaid_code: str) -> bool:
+    lines = [
+        line.strip() 
+        for line in mermaid_code.strip().split("\n") 
+        if line.strip() and not line.strip().startswith("%%")
+    ]
+    if not lines:
+        return False
+    
+    header = lines[0]
+    valid_headers = [
+        r"^graph\s+(TD|LR|TB|BT|RL)$",
+        r"^flowchart\s+(TD|LR|TB|BT|RL)$",
+        r"^sequenceDiagram$",
+        r"^classDiagram$",
+        r"^stateDiagram-v2$",
+        r"^erDiagram$"
+    ]
+    if not any(re.match(h, header, re.IGNORECASE) for h in valid_headers):
+        return False
+    
+    for line in lines[1:]:
+        if re.search(r"[-=]{4,}>", line):
+            return False
+        for open_b, close_b in [("[", "]"), ("(", ")"), ("{", "}")]:
+            if line.count(open_b) != line.count(close_b):
+                return False
+    return True
 
 
 

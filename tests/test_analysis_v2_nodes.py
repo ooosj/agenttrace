@@ -8,7 +8,10 @@ from agenttrace.agents.analysis.nodes.evidence_evaluator import evidence_evaluat
 from agenttrace.agents.analysis.nodes.evidence_scout import evidence_scout
 from agenttrace.agents.analysis.nodes.finalize_task import finalize_task
 from agenttrace.agents.analysis.nodes.persist_analysis import persist_analysis
-from agenttrace.agents.analysis.nodes.finalize_analysis import finalize_analysis
+from agenttrace.agents.analysis.nodes.finalize_analysis import (
+    finalize_analysis,
+    validate_mermaid_syntax,
+)
 from agenttrace.agents.analysis.nodes.quality_gate import quality_gate
 from agenttrace.agents.analysis.nodes.repository_synthesizer import repository_synthesizer
 from agenttrace.agents.analysis.nodes.request_builder import request_builder
@@ -341,3 +344,46 @@ def test_persist_analysis_renders_report_markdown_from_sections():
 
     assert payload["analysis_report"]["body_markdown"].startswith("# 1. 핵심 요약")
     assert "```mermaid" in payload["analysis_report"]["body_markdown"]
+
+
+def test_validate_mermaid_syntax():
+    # Valid diagrams
+    flowchart_ok = """
+    flowchart TD
+      A[Start] --> B(Process)
+      B --> C{Decision}
+      C -->|Yes| D[End]
+    """
+    assert validate_mermaid_syntax(flowchart_ok) is True
+
+    seq_ok = """
+    sequenceDiagram
+      Alice->>Bob: Hello Bob, how are you?
+      Bob-->>Alice: Jolly good!
+    """
+    assert validate_mermaid_syntax(seq_ok) is True
+
+    # Invalid header
+    invalid_header = """
+    invalidDiagram
+      A --> B
+    """
+    assert validate_mermaid_syntax(invalid_header) is False
+
+    # Mismatched bracket
+    mismatched_bracket = """
+    flowchart TD
+      A[Start) --> B
+    """
+    assert validate_mermaid_syntax(mismatched_bracket) is False
+
+    # Arrow length error (e.g. 4 or more hyphens/equals in arrow)
+    arrow_err = """
+    flowchart TD
+      A ----> B
+    """
+    assert validate_mermaid_syntax(arrow_err) is False
+
+    # Empty code
+    assert validate_mermaid_syntax("") is False
+    assert validate_mermaid_syntax("   \n  \n") is False
