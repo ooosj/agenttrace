@@ -60,6 +60,11 @@ class AnalysisState(TypedDict, total=False):
     analysis_mode: str
     content_chunks: list[dict]
     chunk_index: dict
+    content_index_request: dict
+    content_index_result: dict
+    embedding_candidates: list[dict]
+    chunk_embedding_rows: list[dict]
+    chunk_embedding_result: dict
     precheck_result: dict
     analysis_limitations: dict
     synthesis: dict

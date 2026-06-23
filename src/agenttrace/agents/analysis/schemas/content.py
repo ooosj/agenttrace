@@ -7,6 +7,7 @@ class ContentChunk(BaseModel):
     chunk_id: str
     file_path: str
     content: str
+    symbol: str | None = None
     start_byte: int = Field(ge=0)
     end_byte: int = Field(ge=0)
     line_start: int = Field(ge=1)

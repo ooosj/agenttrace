@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import hashlib
 import re
 from collections import defaultdict
 
@@ -67,6 +69,33 @@ def _keywords(path: str, content: str) -> list[str]:
     return result[:80]
 
 
+def _chunk_id(file_path: str, line_start: int, line_end: int, content_hash: str) -> str:
+    raw = f"{file_path}:{line_start}:{line_end}:{content_hash}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _python_symbol_for_range(path: str, content: str, line_start: int, line_end: int) -> str | None:
+    if not path.endswith(".py"):
+        return None
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return None
+    best: tuple[int, str] | None = None
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        node_start = getattr(node, "lineno", None)
+        node_end = getattr(node, "end_lineno", None)
+        if node_start is None or node_end is None:
+            continue
+        if node_start >= line_start and node_end <= line_end:
+            span = node_end - node_start
+            if best is None or span > best[0]:
+                best = (span, node.name)
+    return best[1] if best else None
+
+
 def chunk_source_files(
     files: list[SourceFile],
     target_size: int = 12000,
@@ -91,15 +120,18 @@ def chunk_source_files(
         while start < len(content):
             end = _end_index_for_byte_target(byte_offsets, start, target_size)
             chunk_text = content[start:end]
+            line_start = _line_for_start_offset(content, start)
+            line_end = _line_for_end_offset(content, end)
             chunks.append(
                 ContentChunk(
-                    chunk_id=f"chunk-{counter:04d}",
+                    chunk_id=_chunk_id(source.path, line_start, line_end, source.content_hash),
                     file_path=source.path,
                     content=chunk_text,
+                    symbol=_python_symbol_for_range(source.path, content, line_start, line_end),
                     start_byte=byte_offsets[start],
                     end_byte=byte_offsets[end],
-                    line_start=_line_for_start_offset(content, start),
-                    line_end=_line_for_end_offset(content, end),
+                    line_start=line_start,
+                    line_end=line_end,
                     is_partial=start > 0 or end < len(content),
                     content_hash=source.content_hash,
                 )
@@ -132,3 +164,22 @@ def build_chunk_index(chunks: list[ContentChunk]) -> ChunkIndex:
         entries=entries,
         chunks_by_id={chunk.chunk_id: chunk for chunk in chunks},
     )
+
+
+def source_chunk_table_contract_sql() -> str:
+    return """
+        CREATE TABLE source_chunks (
+            chunk_id varchar(64) PRIMARY KEY,
+            snapshot_id uuid NOT NULL REFERENCES repository_snapshots(snapshot_id) ON DELETE CASCADE,
+            file_path text NOT NULL,
+            content text NOT NULL,
+            start_line integer,
+            end_line integer,
+            symbol text,
+            content_hash varchar(64) NOT NULL,
+            chunk_type varchar(30) NOT NULL DEFAULT 'code',
+            embedding vector(1536),
+            created_at timestamptz NOT NULL DEFAULT now(),
+            CONSTRAINT chk_source_chunks_type CHECK (chunk_type IN ('code', 'doc', 'config', 'other'))
+        )
+    """.strip()

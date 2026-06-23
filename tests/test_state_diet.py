@@ -14,6 +14,7 @@ from agenttrace.agents.analysis.nodes.finalize_analysis import finalize_analysis
 from agenttrace.agents.analysis.nodes.critical_error_handler import critical_error_handler
 from agenttrace.agents.analysis.nodes.harness_analyzer import harness_analyzer
 from agenttrace.agents.analysis.schemas.input import AnalysisInputRequest
+from agenttrace.config import get_settings
 
 
 def test_collect_inputs_saves_to_disk_and_strips_content():
@@ -91,7 +92,11 @@ def test_content_preprocessor_reads_from_disk_and_strips_chunks():
         shutil.rmtree(local_repo_dir, ignore_errors=True)
 
 
-def test_evidence_evaluator_reads_and_slices_utf8_correctly():
+def test_evidence_evaluator_reads_and_slices_utf8_correctly(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AGENTTRACE_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    get_settings.cache_clear()
     run_id = f"test-run-{uuid4()}"
     local_repo_dir = Path("tmp/agenttrace") / run_id
     local_repo_dir.mkdir(parents=True, exist_ok=True)
@@ -118,7 +123,7 @@ def test_evidence_evaluator_reads_and_slices_utf8_correctly():
                 }
             ]
         },
-        "claims": [{"claim_id": "claim-1", "claim_text": "한글 지원"}],
+        "claims": [{"claim_id": "claim-1", "claim_text": "lang support 한글"}],
         "selected_chunks": [
             {
                 "chunk_id": "chunk-1",
