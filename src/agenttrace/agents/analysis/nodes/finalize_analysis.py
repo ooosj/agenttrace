@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import re
 import time
@@ -86,7 +87,9 @@ def finalize_analysis(state: AnalysisState) -> AnalysisState:
     synthesis = state.get("synthesis", {})
 
     evidence_refs = state.get("evidence_refs") or _build_evidence_refs(state)
+    _batch_start = time.perf_counter()
     area_findings = state.get("area_findings") or _build_area_findings(state, evidence_refs)
+    batch_wall_ms = int((time.perf_counter() - _batch_start) * 1000)
     report_sections = state.get("report_sections") or _build_report_sections(state, area_findings, evidence_refs)
     
     # Map claim_id to evidence_signal_ids from task results
@@ -146,6 +149,7 @@ def finalize_analysis(state: AnalysisState) -> AnalysisState:
         area_findings=len(result.area_findings),
         evidence_refs=len(result.evidence_refs),
         status=result.analysis_status,
+        batch_wall_ms=batch_wall_ms,
         duration_ms=int((time.perf_counter() - _t) * 1000),
     )
     return {"final_result": result.model_dump()}
@@ -299,15 +303,19 @@ def _build_area_findings(state: AnalysisState, evidence_refs: list[dict]) -> lis
             "{chunks_text}\n"
         )
 
-        for batch in batches_definition:
-            areas_list_text = ", ".join([f"'{area_id}' ({area_name})" for area_id, area_name in batch["areas"]])
-            areas_detail_text = "\n".join([f"- {area_id}: {area_name}" for area_id, area_name in batch["areas"]])
+        # executor 진입 전 prompt 1회 생성 (기존 for 루프에서 매번 생성하던 부분)
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", human_prompt),
+        ])
 
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", human_prompt),
-            ])
-
+        def _invoke_single_batch(batch_def: dict) -> tuple[list, list]:
+            areas_list_text = ", ".join(
+                [f"'{area_id}' ({area_name})" for area_id, area_name in batch_def["areas"]]
+            )
+            areas_detail_text = "\n".join(
+                [f"- {area_id}: {area_name}" for area_id, area_name in batch_def["areas"]]
+            )
             prompt_value = prompt.invoke({
                 "areas_list_text": areas_list_text,
                 "areas_detail_text": areas_detail_text,
@@ -315,10 +323,15 @@ def _build_area_findings(state: AnalysisState, evidence_refs: list[dict]) -> lis
                 "file_tree": file_tree_str[:20000],
                 "chunks_text": chunks_text,
             })
-
             batch_res = structured_model.invoke(prompt_value)
-            all_area_findings.extend(batch_res.area_findings)
-            all_evidence_refs.extend(batch_res.evidence_refs)
+            return batch_res.area_findings, batch_res.evidence_refs
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(_invoke_single_batch, b) for b in batches_definition]
+            for future in concurrent.futures.as_completed(futures):
+                findings, refs = future.result()
+                all_area_findings.extend(findings)
+                all_evidence_refs.extend(refs)
 
         # De-duplicate evidence_refs by ID and normalize/sanitize line numbers
         unique_refs_dict = {}

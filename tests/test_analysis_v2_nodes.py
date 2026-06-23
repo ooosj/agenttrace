@@ -745,3 +745,27 @@ def test_finalize_analysis_with_llm_mermaid_fail_after_retry(monkeypatch):
     assert len(report_sections) == 11
     assert fake_report_model.call_count == 2
     assert report_sections[3]["mermaid_diagram"] is None
+
+
+from agenttrace.agents.analysis.nodes.finalize_analysis import _build_area_findings
+
+def test_build_area_findings_invokes_all_three_batches(monkeypatch):
+    """3개 배치가 모두 호출되는지 확인 (call_count 기반, timing assertion 없음)."""
+    import agenttrace.agents.analysis.nodes.finalize_analysis as fa_module
+    from unittest.mock import MagicMock
+
+    mock_model = MagicMock()
+    mock_model.with_structured_output.return_value = mock_model
+    mock_model.invoke.return_value = MagicMock(area_findings=[], evidence_refs=[])
+    monkeypatch.setattr(fa_module, "build_openai_analysis_model", lambda: mock_model)
+    monkeypatch.setattr(fa_module, "get_settings", lambda: MagicMock(openai_api_key="test"))
+
+    state = {"readme": "# Test", "file_tree": [], "content_chunks": []}
+    _build_area_findings(state, [{"id": "ref-1", "path": "README.md",
+                                   "description": "d", "source_type": "doc",
+                                   "symbol": None, "chunk_id": None,
+                                   "line_start": None, "line_end": None,
+                                   "content_excerpt": None, "content_hash": None}])
+
+    # 배치 3개가 모두 호출됨
+    assert mock_model.invoke.call_count == 3
