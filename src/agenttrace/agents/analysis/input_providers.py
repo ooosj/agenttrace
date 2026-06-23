@@ -68,22 +68,23 @@ class AnalysisInputAssembler:
             from agenttrace.config import get_settings
             from agenttrace.agents.analysis.github_provider import GitHubInputProvider
             settings = get_settings()
-            if settings.github_token:
-                commit_sha = (
-                    request.snapshot.commit_sha
-                    if request.snapshot and request.snapshot.commit_sha
-                    else "HEAD"
+            commit_sha = (
+                request.snapshot.commit_sha
+                if request.snapshot and request.snapshot.commit_sha
+                else "HEAD"
+            )
+            try:
+                # GITHUB_TOKEN이 없더라도 public repository 수집 시도를 허용
+                token = settings.github_token if settings.github_token else None
+                provider = GitHubInputProvider(token=token)
+                source_files = provider.load(
+                    github_url=request.repository.github_url,
+                    commit_sha=commit_sha,
                 )
-                try:
-                    provider = GitHubInputProvider(token=settings.github_token)
-                    source_files = provider.load(
-                        github_url=request.repository.github_url,
-                        commit_sha=commit_sha,
-                    )
-                    input_manifest["source_provider"] = "github_api"
-                except Exception as exc:
-                    missing_inputs.append("github_source_files")
-                    input_manifest["github_error"] = str(exc)
+                input_manifest["source_provider"] = "github_api"
+            except Exception as exc:
+                missing_inputs.append("github_source_files")
+                input_manifest["github_error"] = str(exc)
 
         # 2순위: gitingest fallback
         if not source_files and request.external_ingest.enabled:

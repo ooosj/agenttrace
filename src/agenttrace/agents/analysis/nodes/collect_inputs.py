@@ -57,7 +57,7 @@ def collect_inputs(state: AnalysisState) -> AnalysisState:
                 if (item.get("path") if isinstance(item, dict) else item)
             ],
             "source_files": selected_files,
-            "external_ingest": {"enabled": False, "provider": "gitingest"},
+            "external_ingest": snapshot.get("external_ingest", {"enabled": False, "provider": "gitingest"}),
         }
     else:
         request_payload = state["analysis_request"]
