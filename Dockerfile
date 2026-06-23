@@ -12,9 +12,9 @@ WORKDIR /app
 
 # 의존성 레이어 (소스 변경 시 캐시 재사용)
 COPY pyproject.toml uv.lock ./
+COPY src ./src
 RUN uv sync --no-dev --frozen
 
-COPY src ./src
 
 EXPOSE 8000
 
