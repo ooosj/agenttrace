@@ -6,6 +6,106 @@ from agenttrace.agents.analysis.schemas.content import ContentChunk
 from agenttrace.agents.analysis.schemas.result import AnalysisResult, ClaimVerdict
 
 
+def _contract_result(**overrides):
+    result = {
+        "analysis_status": "completed",
+        "agent_type": "Framework",
+        "tech_stack_summary": {
+            "primary_language": "Python",
+            "frameworks": ["FastAPI"],
+            "dependencies": ["langgraph"],
+        },
+        "area_findings": [
+            {
+                "area_id": area_id,
+                "area_name": area_name,
+                "status": "confirmed",
+                "summary": f"{area_name} 확인됨",
+                "findings": [
+                    {
+                        "content": f"{area_name} 근거 기반 사실",
+                        "type": "fact",
+                        "evidence_refs": ["ref-1"],
+                    }
+                ],
+                "limitations": [],
+                "unresolved_questions": [],
+            }
+            for area_id, area_name in [
+                ("project-purpose", "프로젝트 목적과 주요 기능"),
+                ("execution-flow", "진입점과 핵심 실행 흐름"),
+                ("architecture-components", "아키텍처와 컴포넌트 구조"),
+                ("agent-patterns", "Agent·LLM 기술과 설계 패턴"),
+                ("tool-integrations", "도구와 외부 연동"),
+                ("data-state-memory", "데이터·상태·메모리 관리"),
+                ("configuration-runtime", "설정·실행·배포 방식"),
+                ("tests-evaluation-limitations", "테스트·평가·정적 분석 한계"),
+            ]
+        ],
+        "evidence_refs": [
+            {
+                "id": "ref-1",
+                "source_type": "code",
+                "path": "src/server.py",
+                "symbol": "create_app",
+                "description": "FastAPI application factory",
+                "chunk_id": "chunk-1",
+                "line_start": 1,
+                "line_end": 12,
+                "content_excerpt": "def create_app():",
+                "content_hash": "sha256:" + "a" * 64,
+            }
+        ],
+        "report_sections": [
+            {
+                "section_id": idx,
+                "section_name": f"section-{idx}",
+                "status": "confirmed",
+                "title": f"{idx}. section",
+                "body_markdown": "근거 기반 설명",
+                "mermaid_diagram": "flowchart TD\n  A --> B" if idx == 4 else None,
+            }
+            for idx in range(1, 12)
+        ],
+        "analysis_limitations": {"missing_inputs": [], "truncated_inputs": [], "notes": []},
+    }
+    result.update(overrides)
+    return result
+
+
+def test_analysis_result_accepts_document_contract_fields():
+    result = AnalysisResult.model_validate(_contract_result())
+
+    assert result.analysis_status == "completed"
+    assert len(result.area_findings) == 8
+    assert len(result.report_sections) == 11
+    assert result.evidence_refs[0].line_start == 1
+
+
+def test_analysis_result_rejects_unknown_evidence_reference():
+    payload = _contract_result()
+    payload["area_findings"][0]["findings"][0]["evidence_refs"] = ["missing-ref"]
+
+    with pytest.raises(ValidationError, match="Unknown evidence ref"):
+        AnalysisResult.model_validate(payload)
+
+
+def test_analysis_result_rejects_missing_common_area():
+    payload = _contract_result()
+    payload["area_findings"] = payload["area_findings"][:-1]
+
+    with pytest.raises(ValidationError, match="Missing common analysis areas"):
+        AnalysisResult.model_validate(payload)
+
+
+def test_analysis_result_rejects_invalid_mermaid_diagram():
+    payload = _contract_result()
+    payload["report_sections"][3]["mermaid_diagram"] = "not mermaid"
+
+    with pytest.raises(ValidationError, match="Invalid Mermaid diagram"):
+        AnalysisResult.model_validate(payload)
+
+
 def test_analysis_input_accepts_backend_payload_without_source_files():
     req = AnalysisInputRequest.model_validate(
         {
