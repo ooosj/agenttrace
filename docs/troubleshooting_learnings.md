@@ -60,3 +60,27 @@
   런타임에 동적으로 `sys.stderr`를 조회하여 기록하는 `StderrPrintLogger` 클래스를 구현하고, `logger_factory`를 `lambda *args, **kwargs: StderrPrintLogger()` 형태로 동적 할당하도록 구조화하여 문제를 해결했습니다.
 * **레슨 런**: 글로벌 싱글톤이나 한 번만 설정되는 프레임워크 로깅 초기화 시, 테스트 러너가 가로채어 관리하는 시스템 스트림 파일 객체를 직접 참조 보관해서는 안 됩니다. 반드시 지연 평가(Lazy evaluation)를 통해 런타임의 최신 파일 핸들을 획득하도록 구현해야 합니다.
 
+---
+
+## 5. DB 테이블 격리 및 격리명 적용 시 기존 테스트 깨짐 현상
+
+* **문제 현상**: `repository_analyses` 테이블명을 `agenttrace_repository_analyses`로 격리 패치 적용 후 `test_content_index_store.py` 내의 테스트에서 어서션 에러 발생.
+* **원인**:
+  기존 단위 테스트 코드 내에서 DB 마이그레이션 쿼리 생성이 제대로 작동하는지 검사할 때, 하드코딩된 `"CREATE TABLE repository_analyses"` 및 `"INSERT INTO repository_analyses"` 문자열 매칭을 검사하고 있어 바뀐 테이블명을 찾지 못해 에러가 발생했습니다.
+* **해결 방법**:
+  [test_content_index_store.py](file:///Users/wolyong/workspace/AgentHub/agenttrace/tests/test_content_index_store.py) 내 어서션 타겟을 `agenttrace_repository_analyses`로 수정하여 테스트가 변경된 테이블명을 정확히 검증하도록 복구했습니다.
+* **레슨 런**: 데이터베이스 테이블 설계나 스키마 명칭을 리팩토링할 때는 연계된 SQL 유효성 검사기 정적 테스트 및 Mock 연결(RecordingConnection) 어서션을 전량 확인하여 테이블명 격리가 테스트 레벨에서도 반영되도록 동기화해야 합니다.
+
+---
+
+## 6. 마크다운 스펙 자동 파싱 테스트(test_spec_sync.py) 정규식 및 파싱 범위 에러
+
+* **문제 현상**: `test_spec_sync.py` 테스트 생성 후 실행 시 `AssertionError: 스펙에서 8개 영역을 찾지 못했습니다 (찾은 개수: 0)` 및 목차 순서 불일치 에러 발생.
+* **원인**:
+  1. `AI_ANALYSIS_SPEC.md` 원문에는 영역 ID 백틱(`project-purpose`)을 감싸는 괄호 `(...)`가 존재했으나, 정규식에 괄호 매칭 기호가 누락되어 8대 영역을 매칭하지 못했습니다.
+  2. 11대 섹션명을 파싱할 때 `\d+\.\s+\*\*([^*]+)\*\*` 패턴이 문서 전체를 스캔하면서 상위 개요 부분의 목차들(예: `1. **Repository 기술 분석 중심 설계**`)까지 매칭하여 순서가 불일치했습니다.
+* **해결 방법**:
+  1. 영역 ID 정규식을 `re.findall(r"영역 \d+:\s+\*\*([^*]+)\*\*\s+\(\\?`([^`]+)\\?`\)", content)`로 수정하여 괄호 짝을 맞춰 매칭하도록 수정했습니다.
+  2. 전체 스캔 대신 `section_block = content.split("#### 6.13.2 11대 고정 보고서 섹션")[1].split("#### 6.13.3")[0]` 방식을 적용하여 **11대 섹션이 선언된 본문 블록만 타겟팅**해 파싱 범위를 고립시켰습니다.
+* **레슨 런**: 기획/설계 문서를 읽어 코드를 검증하는 Specification-as-Code 기법을 적용할 때는 정규식 매칭이 전체 문서의 불필요한 영역(Header, Intro)을 오탐하지 않도록 대상 텍스트 영역을 물리적으로 슬라이싱(Slicing)한 후 검사를 적용하는 것이 안전합니다.
+
