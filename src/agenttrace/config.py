@@ -11,6 +11,8 @@ class Settings:
     service_name: str = "agenttrace-ai"
     summary_model: str = "gpt-4o-mini"
     analysis_model: str = "gpt-4o-mini"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimension: int = 1536
     repo_ingest_base_url: str = "https://gitingest.com"
     agents_callback_url: str = "http://localhost:8080/api/v1/internal/analysis/callback"
     repo_ingest_host_header: str | None = None
@@ -52,9 +54,23 @@ def get_settings() -> Settings:
             env_values,
             False,
         ),
-        openai_api_key=_get_env("OPENAI_API_KEY", env_values),
+        embedding_model=_get_env(
+            "AGENTTRACE_EMBEDDING_MODEL",
+            env_values,
+            "text-embedding-3-small",
+        )
+        or "text-embedding-3-small",
+        embedding_dimension=int(
+            _get_env("AGENTTRACE_EMBEDDING_DIMENSION", env_values, "1536")
+            or "1536"
+        ),
+        openai_api_key=(
+            _get_env("AGENTTRACE_OPENAI_API_KEY", env_values)
+            or _get_env("OPENAI_API_KEY", env_values)
+        ),
         openai_api_base=(
-            _get_env("OPENAI_API_BASE", env_values)
+            _get_env("AGENTTRACE_OPENAI_API_BASE", env_values)
+            or _get_env("OPENAI_API_BASE", env_values)
             or _get_env("OPENAI_BASE_URL", env_values)
         ),
         langsmith_tracing=_get_env("LANGSMITH_TRACING", env_values),
