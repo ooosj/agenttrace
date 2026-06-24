@@ -19,7 +19,7 @@ from agenttrace.agents.analysis.schemas.result import (
 from agenttrace.agents.analysis.state import AnalysisState
 from agenttrace.config import get_settings
 from agenttrace.logging_config import get_logger
-from agenttrace.models import build_openai_analysis_model
+from agenttrace.models import build_openai_analysis_model, build_openai_finalize_model
 
 logger = get_logger(__name__)
 
@@ -58,7 +58,7 @@ def _generate_mermaid_for_section(
 ) -> str | None:
     """섭션별 Mermaid 다이어그램을 별도 경량 LLM 호출로 생성. 실패 시 None 반환."""
     try:
-        model = build_openai_analysis_model()
+        model = build_openai_finalize_model()
         structured_model = model.with_structured_output(MermaidResult)
         prompt = ChatPromptTemplate.from_messages([
             ("system",
@@ -345,7 +345,7 @@ def _build_area_findings(state: AnalysisState, evidence_refs: list[dict]) -> lis
         all_area_findings = []
         all_evidence_refs = []
 
-        model = build_openai_analysis_model()
+        model = build_openai_finalize_model()
         structured_model = model.with_structured_output(BatchAnalysisResult)
 
         system_prompt = (
@@ -515,7 +515,7 @@ def _build_report_sections(state: AnalysisState, area_findings: list[dict], evid
         area_findings_str = _compact_area_findings(area_findings)
         evidence_refs_str = _compact_evidence_refs(evidence_refs)
 
-        model = build_openai_analysis_model()
+        model = build_openai_finalize_model()
         structured_model = model.with_structured_output(ReportBodyResult)
 
         system_prompt = (

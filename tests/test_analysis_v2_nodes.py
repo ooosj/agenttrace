@@ -502,7 +502,7 @@ def test_finalize_analysis_with_llm_success(monkeypatch):
                 return FakeMermaidModel()
             raise ValueError(f"Unknown schema: {schema}")
 
-    monkeypatch.setattr(fa_module, "build_openai_analysis_model", lambda: FakeModel())
+    monkeypatch.setattr(fa_module, "build_openai_finalize_model", lambda: FakeModel())
 
     import agenttrace.config
     original_get_settings = agenttrace.config.get_settings
@@ -585,7 +585,7 @@ def test_finalize_analysis_with_llm_mermaid_retry(monkeypatch):
                 return fake_mermaid
             raise ValueError(f"Unknown schema: {schema}")
 
-    monkeypatch.setattr(fa_module, "build_openai_analysis_model", lambda: FakeModel())
+    monkeypatch.setattr(fa_module, "build_openai_finalize_model", lambda: FakeModel())
 
     import agenttrace.config
     original_get_settings = agenttrace.config.get_settings
@@ -660,7 +660,7 @@ def test_finalize_analysis_with_llm_mermaid_fail_after_retry(monkeypatch):
                 return FakeMermaidModel()
             raise ValueError(f"Unknown schema: {schema}")
 
-    monkeypatch.setattr(fa_module, "build_openai_analysis_model", lambda: FakeModel())
+    monkeypatch.setattr(fa_module, "build_openai_finalize_model", lambda: FakeModel())
 
     import agenttrace.config
     original_get_settings = agenttrace.config.get_settings
@@ -700,7 +700,7 @@ def test_generate_mermaid_for_section_returns_valid_diagram(monkeypatch):
     mock_model.invoke.return_value = MermaidResult(
         mermaid_code="flowchart TD\n  A[Input] --> B[Output]"
     )
-    monkeypatch.setattr(fa_module, "build_openai_analysis_model", lambda: mock_model)
+    monkeypatch.setattr(fa_module, "build_openai_finalize_model", lambda: mock_model)
 
     result = _generate_mermaid_for_section(
         section_id=4, section_name="전체 동작 방식",
@@ -718,7 +718,7 @@ def test_generate_mermaid_for_section_returns_none_on_failure(monkeypatch):
     mock_model = MagicMock()
     mock_model.with_structured_output.return_value = mock_model
     mock_model.invoke.side_effect = RuntimeError("API error")
-    monkeypatch.setattr(fa_module, "build_openai_analysis_model", lambda: mock_model)
+    monkeypatch.setattr(fa_module, "build_openai_finalize_model", lambda: mock_model)
 
     result = _generate_mermaid_for_section(
         section_id=4, section_name="전체 동작 방식",
@@ -740,7 +740,7 @@ def test_build_area_findings_invokes_all_three_batches(monkeypatch):
     mock_model = MagicMock()
     mock_model.with_structured_output.return_value = mock_model
     mock_model.invoke.return_value = MagicMock(area_findings=[], evidence_refs=[])
-    monkeypatch.setattr(fa_module, "build_openai_analysis_model", lambda: mock_model)
+    monkeypatch.setattr(fa_module, "build_openai_finalize_model", lambda: mock_model)
     monkeypatch.setattr(fa_module, "get_settings", lambda: MagicMock(openai_api_key="test"))
 
     state = {"readme": "# Test", "file_tree": [], "content_chunks": []}
@@ -802,3 +802,11 @@ def test_compact_evidence_refs_excludes_content_excerpt():
     assert "ref-1" in result
     assert "src/main.py" in result
     assert "def main():" not in result  # content_excerpt 제외
+
+
+def test_finalize_model_config_defaults():
+    """build_openai_finalize_model이 timeout=90, max_tokens=8192 기본값을 가지는가."""
+    from agenttrace.config import get_settings
+    settings = get_settings()
+    assert settings.finalize_model_timeout == 90
+    assert settings.finalize_model_max_tokens == 8192
