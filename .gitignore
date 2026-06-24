@@ -6,9 +6,11 @@ __pycache__/
 *.egg-info/
 .worktrees/
 out/*.json
+out/*.log
 !out/.gitkeep
 docs/reference/
 tmp/
+data/context7_snapshot.json
 
 # Local agents configuration and runtime artifacts
 .langgraph_api/

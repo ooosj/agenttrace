@@ -66,3 +66,86 @@ def my_node(state: AnalysisState) -> AnalysisState:
 ```
 
 - LLM 실패·fallback 처리 시에는 `log.warning()`, 코드 예외 상황에는 `log.error()`를 사용하며 context-specific 정보 외의 API 키 등 민감 정보가 로그 문자열에 포함되어서는 안 됩니다.
+
+## 5. Subagent-Driven Development (서브에이전트 실행 원칙)
+
+`superpowers:subagent-driven-development` 스킬로 plan을 실행할 때 아래 원칙을 준수하십시오.
+
+### 5-1. Task 세분화 기준
+
+하나의 Task는 **단일 함수 추가, 단일 import 교체, 단일 블록 제거** 수준으로 쪼개야 합니다.  
+아래 신호 중 하나라도 해당되면 Task를 더 잘게 분할하십시오:
+
+- 변경 파일이 2개를 초과한다
+- 테스트 rewrite와 구현 변경이 같은 Task에 있다
+- "A를 하고 B도 한다"는 설명이 필요하다
+- 구현자가 여러 파일의 기존 로직을 이해해야만 작성할 수 있다
+
+**나쁜 예 (너무 큰 Task):**
+```
+Task 3: Mermaid 분리 + 기존 테스트 3개 rewrite + 신규 테스트 2개 추가
+```
+
+**좋은 예 (세분화된 Tasks):**
+```
+Task 3A: ReportBodySection / ReportBodyResult / MermaidResult 스키마 추가
+Task 3B: _generate_mermaid_for_section 함수 구현
+Task 3C: _build_report_sections에서 retry 블록 제거
+Task 3D: _build_report_sections에 섹션 4·5 Mermaid 병렬 생성 추가
+Task 3E: 기존 테스트 3개 rewrite (스키마 교체 반영)
+Task 3F: _generate_mermaid_for_section 단위 테스트 2개 추가
+```
+
+### 5-2. Plan 상세화 기준
+
+Task가 작을수록 Plan은 더 구체적이어야 합니다. 각 Step에 다음을 명시하십시오:
+
+- **대상 파일 + 정확한 위치** (예: `finalize_analysis.py` L32 `ReportSynthesisResult` 다음에)
+- **추가/교체/삭제할 코드 블록** (diff 수준으로 기술)
+- **테스트 assert 조건** (함수 반환값, call_count 등 구체적 검증 기준)
+
+서브에이전트가 코드를 "파악"하는 시간 없이 바로 실행할 수 있을 만큼 상세해야 합니다.
+
+### 5-3. 서브에이전트 모델 Tier
+
+| Task 유형 | 기준 | 사용 모델 |
+|---|---|---|
+| **Flash** | 단일 함수 추가·삭제, import 교체, 단순 블록 제거, 직관적 단위 테스트 추가 | `flash` (cheapest) |
+| **Standard** | 기존 코드 흐름 이해가 필요한 리팩토링, 테스트 rewrite (기존 mock 구조 파악 필요) | `self` |
+| **Full (리뷰어)** | Spec compliance 검토, Code quality 검토, 설계 판단 | `research` 또는 `self` |
+
+> **원칙**: 서브에이전트에게 "이 코드를 이해해야 한다"는 부담을 주는 순간, 더 작은 Task로 분할하거나 모델을 올려야 한다는 신호입니다.
+
+### 5-4. 금지 사항
+
+- Task 하나에 구현 + 테스트 rewrite를 동시에 포함하는 것
+- 서브에이전트에게 plan 파일을 직접 읽게 하는 것 (컨트롤러가 full text를 전달해야 함)
+- Spec compliance 통과 전에 Code quality 리뷰를 시작하는 것
+- 같은 파일을 수정하는 구현 서브에이전트를 병렬 실행하는 것
+
+### 5-5. 병렬 실행 가능 조건
+
+아래 조건을 **모두** 만족하면 구현 서브에이전트를 병렬로 디스패치할 수 있습니다:
+
+1. **파일 비중복**: 각 Task가 수정하는 파일이 서로 겹치지 않는다
+2. **순서 독립**: Task B가 Task A의 결과물(함수, 타입, 상수)에 의존하지 않는다
+3. **독립 테스트 가능**: 각 Task를 단독으로 `pytest`로 검증할 수 있다
+
+**병렬 가능 예시:**
+```
+동시 실행 OK:
+  Task 3A: finalize_analysis.py — 새 스키마 클래스 추가
+  Task 4A: config.py — finalize_model_timeout 필드 추가
+  (다른 파일, 상호 의존 없음)
+```
+
+**병렬 불가 예시:**
+```
+순차 실행 필요:
+  Task 3A: finalize_analysis.py — ReportBodyResult 스키마 추가
+  Task 3B: finalize_analysis.py — _generate_mermaid_for_section 구현  ← 같은 파일
+  Task 3C: finalize_analysis.py — _build_report_sections 수정          ← 같은 파일 + 3A 결과 의존
+```
+
+> **참고**: 병렬 실행 시 `superpowers:dispatching-parallel-agents` 스킬을 함께 적용하십시오.
+

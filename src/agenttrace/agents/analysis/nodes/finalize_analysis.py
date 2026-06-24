@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import re
 import time
@@ -18,7 +19,7 @@ from agenttrace.agents.analysis.schemas.result import (
 from agenttrace.agents.analysis.state import AnalysisState
 from agenttrace.config import get_settings
 from agenttrace.logging_config import get_logger
-from agenttrace.models import build_openai_analysis_model
+from agenttrace.models import build_openai_analysis_model, build_openai_finalize_model
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,70 @@ class BatchAnalysisResult(BaseModel):
 
 class ReportSynthesisResult(BaseModel):
     report_sections: list[ReportSection] = Field(default_factory=list)
+
+
+class ReportBodySection(BaseModel):
+    """Mermaid 없이 body_markdown만 생성하는 synthesis용 스키마."""
+    section_id: int
+    section_name: str
+    status: str
+    title: str
+    body_markdown: str
+
+
+class ReportBodyResult(BaseModel):
+    report_sections: list[ReportBodySection] = Field(default_factory=list)
+
+
+class MermaidResult(BaseModel):
+    mermaid_code: str = Field(default="")
+
+
+def _generate_mermaid_for_section(
+    section_id: int,
+    section_name: str,
+    readme: str,
+    area_summary: str,
+) -> str | None:
+    """섭션별 Mermaid 다이어그램을 별도 경량 LLM 호출로 생성. 실패 시 None 반환."""
+    try:
+        model = build_openai_finalize_model()
+        structured_model = model.with_structured_output(MermaidResult)
+        prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "You are a technical diagram expert. Generate a valid Mermaid diagram. "
+             "Output ONLY raw mermaid syntax (no markdown code blocks). "
+             "Use: flowchart TD/LR, graph TD/LR, sequenceDiagram, or classDiagram. "
+             "Keep it concise (5-15 nodes). Double-quote labels with special characters."),
+            ("human",
+             "Section {section_id}: {section_name}\n\nContext:\n{context}\n\n"
+             "Generate a Mermaid diagram for this section."),
+        ])
+        result = structured_model.invoke(prompt.invoke({
+            "section_id": section_id,
+            "section_name": section_name,
+            "context": f"README:\n{readme[:5000]}\n\nArea summary:\n{area_summary[:2000]}",
+        }))
+        code = result.mermaid_code
+        if "```" in code:
+            code = re.sub(r"```(mermaid)?", "", code).strip()
+        # 1회 retry (invalid syntax인 경우만)
+        if not validate_mermaid_syntax(code):
+            retry_result = structured_model.invoke(prompt.invoke({
+                "section_id": section_id,
+                "section_name": section_name,
+                "context": (
+                    f"README:\n{readme[:5000]}\n\nArea summary:\n{area_summary[:2000]}\n\n"
+                    f"Previous attempt was invalid. Fix syntax issues and regenerate."
+                ),
+            }))
+            code = retry_result.mermaid_code
+            if "```" in code:
+                code = re.sub(r"```(mermaid)?", "", code).strip()
+        return code if validate_mermaid_syntax(code) else None
+    except Exception as exc:
+        logger.warning(f"Mermaid generation for section {section_id} failed: {exc}")
+        return None
 
 
 def validate_mermaid_syntax(mermaid_code: str) -> bool:
@@ -86,8 +151,17 @@ def finalize_analysis(state: AnalysisState) -> AnalysisState:
     synthesis = state.get("synthesis", {})
 
     evidence_refs = state.get("evidence_refs") or _build_evidence_refs(state)
+    _batch_start = time.perf_counter()
     area_findings = state.get("area_findings") or _build_area_findings(state, evidence_refs)
-    report_sections = state.get("report_sections") or _build_report_sections(state, area_findings, evidence_refs)
+    batch_wall_ms = int((time.perf_counter() - _batch_start) * 1000)
+    _synthesis_start = time.perf_counter()
+    if state.get("report_sections"):
+        report_sections = state.get("report_sections")
+        synthesis_ms = 0
+        mermaid_ms = 0
+    else:
+        report_sections, mermaid_ms = _build_report_sections(state, area_findings, evidence_refs)
+        synthesis_ms = int((time.perf_counter() - _synthesis_start) * 1000) - mermaid_ms
     
     # Map claim_id to evidence_signal_ids from task results
     claim_signals = {}
@@ -146,6 +220,9 @@ def finalize_analysis(state: AnalysisState) -> AnalysisState:
         area_findings=len(result.area_findings),
         evidence_refs=len(result.evidence_refs),
         status=result.analysis_status,
+        batch_wall_ms=batch_wall_ms,
+        synthesis_ms=synthesis_ms,
+        mermaid_ms=mermaid_ms,
         duration_ms=int((time.perf_counter() - _t) * 1000),
     )
     return {"final_result": result.model_dump()}
@@ -268,7 +345,7 @@ def _build_area_findings(state: AnalysisState, evidence_refs: list[dict]) -> lis
         all_area_findings = []
         all_evidence_refs = []
 
-        model = build_openai_analysis_model()
+        model = build_openai_finalize_model()
         structured_model = model.with_structured_output(BatchAnalysisResult)
 
         system_prompt = (
@@ -299,15 +376,19 @@ def _build_area_findings(state: AnalysisState, evidence_refs: list[dict]) -> lis
             "{chunks_text}\n"
         )
 
-        for batch in batches_definition:
-            areas_list_text = ", ".join([f"'{area_id}' ({area_name})" for area_id, area_name in batch["areas"]])
-            areas_detail_text = "\n".join([f"- {area_id}: {area_name}" for area_id, area_name in batch["areas"]])
+        # executor 진입 전 prompt 1회 생성 (기존 for 루프에서 매번 생성하던 부분)
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", human_prompt),
+        ])
 
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", human_prompt),
-            ])
-
+        def _invoke_single_batch(batch_def: dict) -> tuple[list, list]:
+            areas_list_text = ", ".join(
+                [f"'{area_id}' ({area_name})" for area_id, area_name in batch_def["areas"]]
+            )
+            areas_detail_text = "\n".join(
+                [f"- {area_id}: {area_name}" for area_id, area_name in batch_def["areas"]]
+            )
             prompt_value = prompt.invoke({
                 "areas_list_text": areas_list_text,
                 "areas_detail_text": areas_detail_text,
@@ -315,10 +396,15 @@ def _build_area_findings(state: AnalysisState, evidence_refs: list[dict]) -> lis
                 "file_tree": file_tree_str[:20000],
                 "chunks_text": chunks_text,
             })
-
             batch_res = structured_model.invoke(prompt_value)
-            all_area_findings.extend(batch_res.area_findings)
-            all_evidence_refs.extend(batch_res.evidence_refs)
+            return batch_res.area_findings, batch_res.evidence_refs
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(_invoke_single_batch, b) for b in batches_definition]
+            for future in concurrent.futures.as_completed(futures):
+                findings, refs = future.result()
+                all_area_findings.extend(findings)
+                all_evidence_refs.extend(refs)
 
         # De-duplicate evidence_refs by ID and normalize/sanitize line numbers
         unique_refs_dict = {}
@@ -397,7 +483,7 @@ def _build_area_findings(state: AnalysisState, evidence_refs: list[dict]) -> lis
         return _build_mock_area_findings(evidence_refs)
 
 
-def _build_mock_report_sections(area_findings: list[dict]) -> list[dict]:
+def _build_mock_report_sections(area_findings: list[dict]) -> tuple[list[dict], int]:
     statuses = {area["area_id"]: area["status"] for area in area_findings}
     default_status = "partially_confirmed" if area_findings else "unconfirmed"
     sections = []
@@ -416,21 +502,21 @@ def _build_mock_report_sections(area_findings: list[dict]) -> list[dict]:
                 "mermaid_diagram": _default_mermaid() if idx == 4 else None,
             }
         )
-    return sections
+    return sections, 0
 
 
-def _build_report_sections(state: AnalysisState, area_findings: list[dict], evidence_refs: list[dict]) -> list[dict]:
+def _build_report_sections(state: AnalysisState, area_findings: list[dict], evidence_refs: list[dict]) -> tuple[list[dict], int]:
     try:
         settings = get_settings()
         if not settings.openai_api_key:
             return _build_mock_report_sections(area_findings)
 
         readme = state.get("readme") or ""
-        area_findings_str = json.dumps(area_findings, indent=2, ensure_ascii=False)
-        evidence_refs_str = json.dumps(evidence_refs, indent=2, ensure_ascii=False)
+        area_findings_str = _compact_area_findings(area_findings)
+        evidence_refs_str = _compact_evidence_refs(evidence_refs)
 
-        model = build_openai_analysis_model()
-        structured_model = model.with_structured_output(ReportSynthesisResult)
+        model = build_openai_finalize_model()
+        structured_model = model.with_structured_output(ReportBodyResult)
 
         system_prompt = (
             "You are an expert AI software analyst. Your task is to synthesize a structured technical report with exactly 11 sections "
@@ -449,12 +535,9 @@ def _build_report_sections(state: AnalysisState, area_findings: list[dict], evid
             "11. 다음 탐색 가이드\n\n"
             "CRITICAL RULES:\n"
             "1. Generate exactly 11 sections. Each section must map to section_id 1 to 11 respectively.\n"
-            "2. For section 4 ('전체 동작 방식') and section 5 ('아키텍처와 주요 컴포넌트'), you MUST generate a valid Mermaid diagram in `mermaid_diagram` field. "
-            "For other sections, `mermaid_diagram` must be null/None.\n"
-            "3. Any generated Mermaid diagram MUST start with one of the standard headers: graph TD/LR, flowchart TD/LR, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram. Do NOT wrap it in markdown code blocks like ```mermaid. Output the raw mermaid syntax directly.\n"
-            "4. Ensure correct bracket matching and valid arrow patterns (no more than 3 hyphens/equals like --->). Special characters or spaces in node labels must be double-quoted (e.g. A[\"Label\"]).\n"
-            "5. Every section must have a `status` which is one of: 'confirmed', 'partially_confirmed', 'unconfirmed', 'not_applicable'.\n"
-            "6. Do not make up facts. Adhere strictly to the findings and evidence provided. If information is missing, prefix the section body with '[확인 불가]' or '[해당 없음]' and explain briefly."
+            "2. The mermaid_diagram field does not exist in this schema. Mermaid diagrams are generated separately after synthesis.\n"
+            "3. Every section must have a `status` which is one of: 'confirmed', 'partially_confirmed', 'unconfirmed', 'not_applicable'.\n"
+            "4. Do not make up facts. Adhere strictly to the findings and evidence provided. If information is missing, prefix the section body with '[확인 불가]' or '[해당 없음]' and explain briefly."
         )
 
         human_prompt = (
@@ -480,62 +563,6 @@ def _build_report_sections(state: AnalysisState, area_findings: list[dict], evid
         res = structured_model.invoke(prompt_value)
         sections = [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in res.report_sections]
 
-        # 1-time Retry loop for Mermaid syntax validation
-        retry_needed = False
-        retry_feedback = []
-
-        for section in sections:
-            m_code = section.get("mermaid_diagram")
-            if m_code:
-                if "```" in m_code:
-                    m_code = re.sub(r"```(mermaid)?", "", m_code).strip()
-                    section["mermaid_diagram"] = m_code
-
-                if not validate_mermaid_syntax(m_code):
-                    retry_needed = True
-                    retry_feedback.append(
-                        f"Section {section.get('section_id')} ('{section.get('section_name')}') has an invalid Mermaid diagram:\n"
-                        f"```\n{m_code}\n```\n"
-                        f"Please fix the syntax (e.g. check mismatched brackets, arrow formats, or double quotes for labels with special characters)."
-                    )
-
-        if retry_needed:
-            retry_prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", human_prompt),
-                ("ai", "{previous_sections}"),
-                ("human", "We found syntax errors in the Mermaid diagrams you generated:\n\n"
-                          "{feedback}\n\n"
-                          "Please regenerate the list of 11 report sections, ensuring that all Mermaid diagrams are syntactically valid according to the rules."),
-            ])
-
-            retry_prompt_value = retry_prompt.invoke({
-                "readme": readme[:30000],
-                "area_findings": area_findings_str,
-                "evidence_refs": evidence_refs_str,
-                "previous_sections": json.dumps(sections, ensure_ascii=False),
-                "feedback": "\n".join(retry_feedback),
-            })
-
-            try:
-                res_retry = structured_model.invoke(retry_prompt_value)
-                sections = [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in res_retry.report_sections]
-            except Exception as retry_exc:
-                logger.warning(f"Mermaid retry synthesis failed: {retry_exc}. Keeping original sections.")
-
-        # Final pass and cleanups
-        for section in sections:
-            m_code = section.get("mermaid_diagram")
-            if m_code:
-                if "```" in m_code:
-                    m_code = re.sub(r"```(mermaid)?", "", m_code).strip()
-                    section["mermaid_diagram"] = m_code
-
-                is_valid_starter = any(m_code.strip().startswith(s) for s in MERMAID_STARTERS)
-                if not is_valid_starter or not validate_mermaid_syntax(m_code):
-                    logger.warning(f"Section {section.get('section_id')} mermaid diagram invalid after retry. Removing diagram.")
-                    section["mermaid_diagram"] = None
-
         sections_by_id = {s.get("section_id"): s for s in sections if s.get("section_id") is not None}
         final_sections = []
         for sid in range(1, 12):
@@ -550,6 +577,7 @@ def _build_report_sections(state: AnalysisState, area_findings: list[dict], evid
                     sec["status"] = "unconfirmed"
                 if "body_markdown" not in sec or not sec["body_markdown"]:
                     sec["body_markdown"] = f"[확인 불가] {sec_name} 섹션에 대한 분석 정보가 수집되지 않았습니다."
+                sec["mermaid_diagram"] = None
                 final_sections.append(sec)
             else:
                 final_sections.append({
@@ -561,7 +589,27 @@ def _build_report_sections(state: AnalysisState, area_findings: list[dict], evid
                     "mermaid_diagram": None,
                 })
 
-        return final_sections
+        # 섭션 4·5 Mermaid 병렬 생성
+        area_summary_map = {af.get("area_id"): af.get("summary", "") for af in area_findings}
+
+        _mermaid_t = time.perf_counter()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            fut4 = executor.submit(
+                _generate_mermaid_for_section,
+                4, "전체 동작 방식", readme, area_summary_map.get("execution-flow", "")
+            )
+            fut5 = executor.submit(
+                _generate_mermaid_for_section,
+                5, "아키텍처와 주요 컴포넌트", readme, area_summary_map.get("architecture-and-modules", "")
+            )
+            mermaid_results = {4: fut4.result(), 5: fut5.result()}
+        mermaid_ms = int((time.perf_counter() - _mermaid_t) * 1000)
+
+        for sec in final_sections:
+            sid = sec.get("section_id")
+            sec["mermaid_diagram"] = mermaid_results.get(sid)
+
+        return final_sections, mermaid_ms
 
     except Exception as exc:
         logger.warning(f"LLM synthesis for report sections failed: {exc}. Falling back to mock sections.")
@@ -588,3 +636,42 @@ def _source_type(path: str) -> str:
     if lowered.endswith((".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".go", ".rs")):
         return "code"
     return "other"
+
+
+def _compact_area_findings(area_findings: list[dict]) -> str:
+    """Report synthesis용 compact payload.
+
+    전달 대상: _build_report_sections의 LLM 입력 prompt에만 사용.
+    저장 대상인 AnalysisResult의 area_findings는 원본 그대로 유지.
+    """
+    compact = []
+    for af in area_findings:
+        compact.append({
+            "area_id": af.get("area_id"),
+            "status": af.get("status"),
+            "summary": af.get("summary"),
+            "findings": [
+                {"content": f.get("content"), "type": f.get("type")}
+                for f in af.get("findings", [])[:3]
+            ],
+            "limitations": af.get("limitations", [])[:2],
+            "unresolved_questions": af.get("unresolved_questions", [])[:2],
+        })
+    return json.dumps(compact, indent=2, ensure_ascii=False)
+
+
+def _compact_evidence_refs(evidence_refs: list[dict]) -> str:
+    """Report synthesis용 compact payload: id/path/description만 포함.
+
+    content_excerpt, content_hash 등 대용량 필드 제외.
+    저장 대상인 AnalysisResult의 evidence_refs는 원본 그대로 유지.
+    """
+    compact = [
+        {
+            "id": r.get("id"),
+            "path": r.get("path"),
+            "description": r.get("description"),
+        }
+        for r in evidence_refs
+    ]
+    return json.dumps(compact, indent=2, ensure_ascii=False)

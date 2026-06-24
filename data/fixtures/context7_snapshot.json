@@ -1,0 +1,1770 @@
+{
+  "repository_id": "955620917",
+  "full_name": "upstash/context7",
+  "github_url": "https://github.com/upstash/context7",
+  "commit_sha": "8a6c029f659a5caa0702a1fd76016828a3c22398",
+  "metadata": {
+    "stars": 57894,
+    "language": "TypeScript",
+    "topics": [
+      "llm",
+      "mcp",
+      "mcp-server",
+      "vibe-coding"
+    ],
+    "description": "Context7 Platform -- Up-to-date code documentation for LLMs and AI code editors",
+    "default_branch": "master"
+  },
+  "readme": "![Cover](https://github.com/upstash/context7/blob/master/public/cover.png?raw=true)\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=context7&config=eyJ1cmwiOiJodHRwczovL21jcC5jb250ZXh0Ny5jb20vbWNwIn0%3D)\n\n# Context7 Platform - Up-to-date Code Docs For Any Prompt\n\n[![Website](https://img.shields.io/badge/Website-context7.com-blue)](https://context7.com) [![smithery badge](https://smithery.ai/badge/@upstash/context7-mcp)](https://smithery.ai/server/@upstash/context7-mcp) [![NPM Version](https://img.shields.io/npm/v/%40upstash%2Fcontext7-mcp?color=red)](https://www.npmjs.com/package/@upstash/context7-mcp) [![MIT licensed](https://img.shields.io/npm/l/%40upstash%2Fcontext7-mcp)](./LICENSE)\n\n[![繁體中文](https://img.shields.io/badge/docs-繁體中文-yellow)](./i18n/README.zh-TW.md) [![简体中文](https://img.shields.io/badge/docs-简体中文-yellow)](./i18n/README.zh-CN.md) [![日本語](https://img.shields.io/badge/docs-日本語-b7003a)](./i18n/README.ja.md) [![한국어 문서](https://img.shields.io/badge/docs-한국어-green)](./i18n/README.ko.md) [![Documentación en Español](https://img.shields.io/badge/docs-Español-orange)](./i18n/README.es.md) [![Documentation en Français](https://img.shields.io/badge/docs-Français-blue)](./i18n/README.fr.md) [![Documentação em Português (Brasil)](<https://img.shields.io/badge/docs-Português%20(Brasil)-purple>)](./i18n/README.pt-BR.md) [![Documentazione in italiano](https://img.shields.io/badge/docs-Italian-red)](./i18n/README.it.md) [![Dokumentasi Bahasa Indonesia](https://img.shields.io/badge/docs-Bahasa%20Indonesia-pink)](./i18n/README.id-ID.md) [![Dokumentation auf Deutsch](https://img.shields.io/badge/docs-Deutsch-darkgreen)](./i18n/README.de.md) [![Документация на русском языке](https://img.shields.io/badge/docs-Русский-darkblue)](./i18n/README.ru.md) [![Українська документація](https://img.shields.io/badge/docs-Українська-lightblue)](./i18n/README.uk.md) [![Türkçe Doküman](https://img.shields.io/badge/docs-Türkçe-blue)](./i18n/README.tr.md) [![Arabic Documentation](https://img.shields.io/badge/docs-Arabic-white)](./i18n/README.ar.md) [![Tiếng Việt](https://img.shields.io/badge/docs-Tiếng%20Việt-red)](./i18n/README.vi.md)\n\n## ❌ Without Context7\n\nLLMs rely on outdated or generic information about the libraries you use. You get:\n\n- ❌ Code examples are outdated and based on year-old training data\n- ❌ Hallucinated APIs that don't even exist\n- ❌ Generic answers for old package versions\n\n## ✅ With Context7\n\nContext7 pulls up-to-date, version-specific documentation and code examples straight from the source — and places them directly into your prompt.\n\n```txt\nCreate a Next.js middleware that checks for a valid JWT in cookies\nand redirects unauthenticated users to `/login`. use context7\n```\n\n```txt\nConfigure a Cloudflare Worker script to cache\nJSON API responses for five minutes. use context7\n```\n\n```txt\nShow me the Supabase auth API for email/password sign-up.\n```\n\nContext7 fetches up-to-date code examples and documentation right into your LLM's context. No tab-switching, no hallucinated APIs that don't exist, no outdated code generation.\n\nWorks in two modes:\n\n- **CLI + Skills** — installs a skill that guides your agent to fetch docs using `ctx7` CLI commands (no MCP required)\n- **MCP** — registers a Context7 MCP server so your agent can call documentation tools natively\n\n## Installation\n\n> [!NOTE]\n> **API Key Recommended**: Get a free API key at [context7.com/dashboard](https://context7.com/dashboard) for higher rate limits.\n\nSet up Context7 for your coding agents with a single command. The `ctx7` CLI requires Node.js 18 or newer.\n\n```bash\nnpx ctx7 setup\n```\n\nAuthenticates via OAuth, generates an API key, and installs the appropriate skill. You can choose between CLI + Skills or MCP mode. Use `--cursor`, `--claude`, or `--opencode` to target a specific agent.\n\nTo remove the generated setup later, run `npx ctx7 remove`. If you globally installed the CLI with `npm install -g ctx7`, remove that package separately with `npm uninstall -g ctx7`.\n\nTo configure manually, use the Context7 server URL `https://mcp.context7.com/mcp` with your MCP client and pass your API key via the `CONTEXT7_API_KEY` header. See the link below for client-specific setup instructions.\n\n**[Manual Installation / Other Clients →](https://context7.com/docs/resources/all-clients)**\n\n## Important Tips\n\n### Use Library Id\n\nIf you already know exactly which library you want to use, add its Context7 ID to your prompt. That way, Context7 can skip the library-matching step and directly retrieve docs.\n\n```txt\nImplement basic authentication with Supabase. use library /supabase/supabase for API and docs.\n```\n\nThe slash syntax tells Context7 exactly which library to load docs for.\n\n### Specify a Version\n\nTo get documentation for a specific library version, just mention the version in your prompt:\n\n```txt\nHow do I set up Next.js 14 middleware? use context7\n```\n\nContext7 will automatically match the appropriate version.\n\n### Add a Rule\n\nIf you installed via `ctx7 setup`, a skill is configured automatically that triggers Context7 for library-related questions. To set up a rule manually instead, add one to your coding agent:\n\n- **Cursor**: `Cursor Settings > Rules`\n- **Claude Code**: `CLAUDE.md`\n- Or the equivalent in your coding agent\n\n**Example rule:**\n\n```txt\nAlways use Context7 when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.\n```\n\n## Available Tools\n\n### CLI Commands\n\n- `ctx7 library <name> <query>`: Searches the Context7 index by library name and returns matching libraries with their IDs.\n- `ctx7 docs <libraryId> <query>`: Retrieves documentation for a library using a Context7-compatible library ID (e.g., `/mongodb/docs`, `/vercel/next.js`).\n\n### MCP Tools\n\n- `resolve-library-id`: Resolves a general library name into a Context7-compatible library ID.\n  - `query` (required): The user's question or task (used to rank results by relevance)\n  - `libraryName` (required): The name of the library to search for\n- `query-docs`: Retrieves documentation for a library using a Context7-compatible library ID.\n  - `libraryId` (required): Exact Context7-compatible library ID (e.g., `/mongodb/docs`, `/vercel/next.js`)\n  - `query` (required): The question or task to get relevant documentation for\n\n## More Documentation\n\n- [CLI Reference](https://context7.com/docs/clients/cli) - Full CLI documentation\n- [MCP Clients](https://context7.com/docs/resources/all-clients) - Manual MCP installation for 30+ clients\n- [Adding Libraries](https://context7.com/docs/adding-libraries) - Submit your library to Context7\n- [Troubleshooting](https://context7.com/docs/resources/troubleshooting) - Common issues and solutions\n- [API Reference](https://context7.com/docs/api-guide) - REST API documentation\n- [Developer Guide](https://context7.com/docs/resources/developer) - Run Context7 MCP locally\n\n## Packages\n\n- [`@upstash/context7-mcp`](https://www.npmjs.com/package/@upstash/context7-mcp) - MCP server\n- [`ctx7`](https://www.npmjs.com/package/ctx7) - CLI\n- [`@upstash/context7-sdk`](https://www.npmjs.com/package/@upstash/context7-sdk) - TypeScript SDK\n- [`@upstash/context7-tools-ai-sdk`](https://www.npmjs.com/package/@upstash/context7-tools-ai-sdk) - Vercel AI SDK tools\n- [`@upstash/context7-pi`](https://www.npmjs.com/package/@upstash/context7-pi) - pi.dev extension\n\n## Disclaimer\n\n1- Context7 projects are community-contributed and while we strive to maintain high quality, we cannot guarantee the accuracy, completeness, or security of all library documentation. Projects listed in Context7 are developed and maintained by their respective owners, not by Context7. If you encounter any suspicious, inappropriate, or potentially harmful content, please use the \"Report\" button on the project page to notify us immediately. We take all reports seriously and will review flagged content promptly to maintain the integrity and safety of our platform. By using Context7, you acknowledge that you do so at your own discretion and risk.\n\n2- This repository hosts the MCP server’s source code. The supporting components — API backend, parsing engine, and crawling engine — are private and not part of this repository.\n\n## 🤝 Connect with Us\n\nStay updated and join our community:\n\n- 📢 Follow us on [X](https://x.com/context7ai) for the latest news and updates\n- 🌐 Visit our [Website](https://context7.com)\n- 💬 Join our [Discord Community](https://upstash.com/discord)\n\n## 📺 Context7 In Media\n\n- [Better Stack: \"Free Tool Makes Cursor 10x Smarter\"](https://youtu.be/52FC3qObp9E)\n- [Cole Medin: \"This is Hands Down the BEST MCP Server for AI Coding Assistants\"](https://www.youtube.com/watch?v=G7gK8H6u7Rs)\n- [Income Stream Surfers: \"Context7 + SequentialThinking MCPs: Is This AGI?\"](https://www.youtube.com/watch?v=-ggvzyLpK6o)\n- [Julian Goldie SEO: \"Context7: New MCP AI Agent Update\"](https://www.youtube.com/watch?v=CTZm6fBYisc)\n- [JeredBlu: \"Context 7 MCP: Get Documentation Instantly + VS Code Setup\"](https://www.youtube.com/watch?v=-ls0D-rtET4)\n- [Income Stream Surfers: \"Context7: The New MCP Server That Will CHANGE AI Coding\"](https://www.youtube.com/watch?v=PS-2Azb-C3M)\n- [AICodeKing: \"Context7 + Cline & RooCode: This MCP Server Makes CLINE 100X MORE EFFECTIVE!\"](https://www.youtube.com/watch?v=qZfENAPMnyo)\n- [Sean Kochel: \"5 MCP Servers For Vibe Coding Glory (Just Plug-In & Go)\"](https://www.youtube.com/watch?v=LqTQi8qexJM)\n\n## ⭐ Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=upstash/context7&type=Date)](https://www.star-history.com/#upstash/context7&Date)\n\n## 📄 License\n\nMIT\n",
+  "file_tree": [
+    {
+      "path": ".agents/plugins/marketplace.json",
+      "size": 391,
+      "type": "file"
+    },
+    {
+      "path": ".changeset/README.md",
+      "size": 510,
+      "type": "file"
+    },
+    {
+      "path": ".changeset/config.json",
+      "size": 373,
+      "type": "file"
+    },
+    {
+      "path": ".claude-plugin/marketplace.json",
+      "size": 373,
+      "type": "file"
+    },
+    {
+      "path": ".env.example",
+      "size": 404,
+      "type": "file"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+      "size": 3063,
+      "type": "file"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/documentation.yml",
+      "size": 1254,
+      "type": "file"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
+      "size": 1338,
+      "type": "file"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "size": 362,
+      "type": "file"
+    },
+    {
+      "path": ".github/plugin/marketplace.json",
+      "size": 537,
+      "type": "file"
+    },
+    {
+      "path": ".github/workflows/canary-release.yml",
+      "size": 1056,
+      "type": "file"
+    },
+    {
+      "path": ".github/workflows/ecr-deploy.yml",
+      "size": 1844,
+      "type": "file"
+    },
+    {
+      "path": ".github/workflows/mcp-registry.yml",
+      "size": 1728,
+      "type": "file"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "size": 1162,
+      "type": "file"
+    },
+    {
+      "path": ".github/workflows/test.yml",
+      "size": 1667,
+      "type": "file"
+    },
+    {
+      "path": ".gitignore",
+      "size": 2364,
+      "type": "file"
+    },
+    {
+      "path": ".prettierignore",
+      "size": 253,
+      "type": "file"
+    },
+    {
+      "path": "LICENSE",
+      "size": 1079,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "size": 9887,
+      "type": "file"
+    },
+    {
+      "path": "SECURITY.md",
+      "size": 1642,
+      "type": "file"
+    },
+    {
+      "path": "docs/adding-libraries.mdx",
+      "size": 2585,
+      "type": "file"
+    },
+    {
+      "path": "docs/agentic-tools/ai-sdk/agents/context7-agent.mdx",
+      "size": 5858,
+      "type": "file"
+    },
+    {
+      "path": "docs/agentic-tools/ai-sdk/getting-started.mdx",
+      "size": 4610,
+      "type": "file"
+    },
+    {
+      "path": "docs/agentic-tools/ai-sdk/tools/query-docs.mdx",
+      "size": 5397,
+      "type": "file"
+    },
+    {
+      "path": "docs/agentic-tools/ai-sdk/tools/resolve-library-id.mdx",
+      "size": 4929,
+      "type": "file"
+    },
+    {
+      "path": "docs/agentic-tools/overview.mdx",
+      "size": 4473,
+      "type": "file"
+    },
+    {
+      "path": "docs/api-guide.mdx",
+      "size": 8794,
+      "type": "file"
+    },
+    {
+      "path": "docs/clients/claude-code.mdx",
+      "size": 5998,
+      "type": "file"
+    },
+    {
+      "path": "docs/clients/cli.mdx",
+      "size": 9513,
+      "type": "file"
+    },
+    {
+      "path": "docs/clients/codex.mdx",
+      "size": 5294,
+      "type": "file"
+    },
+    {
+      "path": "docs/clients/copilot-cli.mdx",
+      "size": 4075,
+      "type": "file"
+    },
+    {
+      "path": "docs/clients/cursor.mdx",
+      "size": 3539,
+      "type": "file"
+    },
+    {
+      "path": "docs/clients/opencode.mdx",
+      "size": 2190,
+      "type": "file"
+    },
+    {
+      "path": "docs/clients/pi.mdx",
+      "size": 2511,
+      "type": "file"
+    },
+    {
+      "path": "docs/clients/vscode.mdx",
+      "size": 3006,
+      "type": "file"
+    },
+    {
+      "path": "docs/contact.mdx",
+      "size": 57,
+      "type": "file"
+    },
+    {
+      "path": "docs/docs.json",
+      "size": 7109,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise.mdx",
+      "size": 5159,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/api/authentication.mdx",
+      "size": 2374,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/api/context/get-documentation-context.mdx",
+      "size": 189,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/api/parse/get-parse-status.mdx",
+      "size": 157,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/api/parse/parse-a-git-repository.mdx",
+      "size": 163,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/api/parse/parse-a-website.mdx",
+      "size": 164,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/api/parse/parse-an-openapi-spec-by-url.mdx",
+      "size": 193,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/api/parse/refresh-a-library.mdx",
+      "size": 175,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/api/parse/upload-an-openapi-spec-file.mdx",
+      "size": 193,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/api/search/search-for-libraries.mdx",
+      "size": 149,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/backup-restore.mdx",
+      "size": 6737,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/deployment/docker.mdx",
+      "size": 3073,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/deployment/kubernetes.mdx",
+      "size": 9516,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/enterprise-managed-auth/entra.mdx",
+      "size": 38970,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/enterprise-managed-auth/okta.mdx",
+      "size": 7325,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/library-import.mdx",
+      "size": 4857,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/on-premise.mdx",
+      "size": 7402,
+      "type": "file"
+    },
+    {
+      "path": "docs/enterprise/security/entra-sso.mdx",
+      "size": 13844,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/api-keys.mdx",
+      "size": 1511,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/chat-widget.mdx",
+      "size": 6684,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/claiming-libraries.mdx",
+      "size": 12571,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/oauth.mdx",
+      "size": 1758,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/policies.mdx",
+      "size": 3427,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/private-sources.mdx",
+      "size": 3180,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/rules.mdx",
+      "size": 1654,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/teamspace.mdx",
+      "size": 2403,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/usage.mdx",
+      "size": 1315,
+      "type": "file"
+    },
+    {
+      "path": "docs/howto/verification.mdx",
+      "size": 6893,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/clients/claude-code/mcp-details.png",
+      "size": 50376,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/clients/claude-code/mcp-list.png",
+      "size": 30130,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/clients/claude-code/mcp-unauthenticated.png",
+      "size": 38798,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/clients/cursor/logo.png",
+      "size": 40415,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/clients/cursor/mcp-settings.png",
+      "size": 69202,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/clients/cursor/rules.png",
+      "size": 126692,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/add-payment-method.png",
+      "size": 611888,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/admin/claim-library-button.png",
+      "size": 170672,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/admin/claim-modal.png",
+      "size": 283206,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/admin/config-overview.png",
+      "size": 285112,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/admin/library-manage-button.png",
+      "size": 385672,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/admin/library-metrics.png",
+      "size": 194639,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/admin/managing-versions.png",
+      "size": 199167,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/api-keys-card.png",
+      "size": 437054,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/billing-page.png",
+      "size": 620497,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/chat-widget.png",
+      "size": 408090,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/manage-cards.png",
+      "size": 295197,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/members-tab.png",
+      "size": 432342,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/private-sources-card.png",
+      "size": 542440,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/public-repository-filters.png",
+      "size": 262159,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/source-type-access.png",
+      "size": 225607,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/teamspace-management.png",
+      "size": 300993,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/usage-stats.png",
+      "size": 311385,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/dashboard/user-dropdown.png",
+      "size": 598314,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/api-keys/api-keys-create-dialog.png",
+      "size": 361656,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/api-keys/api-keys-created.png",
+      "size": 373780,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/api-keys/api-keys-empty.png",
+      "size": 127982,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/enterprise-managed-auth/context7-ema-config.png",
+      "size": 236211,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/enterprise-managed-auth/okta-assignments.png",
+      "size": 122038,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/enterprise-managed-auth/okta-enable-feature.png",
+      "size": 219072,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/enterprise-managed-auth/okta-manage-connections.png",
+      "size": 141040,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/enterprise-managed-auth/okta-requesting-app.png",
+      "size": 86287,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/enterprise-managed-auth/okta-resource-app.png",
+      "size": 74592,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/01-register-app.png",
+      "size": 400247,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/02-app-overview.png",
+      "size": 593643,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/03-client-secret.png",
+      "size": 493574,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/04-app-roles.png",
+      "size": 469869,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/05-assignment-required.png",
+      "size": 536302,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/06-assign-user-role.png",
+      "size": 344497,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/07-context7-settings-card.png",
+      "size": 369557,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/08-filled-credentials.png",
+      "size": 435636,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/10-login-page.png",
+      "size": 232473,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/11-users-tab.png",
+      "size": 330347,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/entra-sso/README.md",
+      "size": 5917,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/library-import/export-menu.png",
+      "size": 126029,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/library-import/export-select.png",
+      "size": 108729,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/library-import/import-source.png",
+      "size": 58999,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/library-import/import-upload.png",
+      "size": 77290,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/enterprise/library-import/imported-badge.png",
+      "size": 76133,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/howto/verification/apply-button.png",
+      "size": 49050,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/howto/verification/apply-modal.png",
+      "size": 73218,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/howto/verification/verification-badge.png",
+      "size": 45180,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/integrations/coderabbit/add-server-modal.png",
+      "size": 593193,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/integrations/coderabbit/integrations-tab.png",
+      "size": 568068,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/integrations/coderabbit/server-connected.png",
+      "size": 584276,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/integrations/coderabbit/update-mcp-settings.png",
+      "size": 357125,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/integrations/tembo/integrations-page.png",
+      "size": 449146,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/integrations/tembo/server-connected.png",
+      "size": 226669,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/on-premise-architecture.png",
+      "size": 121457,
+      "type": "file"
+    },
+    {
+      "path": "docs/images/security/classifier_pipeline.png",
+      "size": 35744,
+      "type": "file"
+    },
+    {
+      "path": "docs/installation.mdx",
+      "size": 83,
+      "type": "file"
+    },
+    {
+      "path": "docs/integrations/code-rabbit.mdx",
+      "size": 2344,
+      "type": "file"
+    },
+    {
+      "path": "docs/integrations/factory-ai.mdx",
+      "size": 1639,
+      "type": "file"
+    },
+    {
+      "path": "docs/integrations/github-actions.mdx",
+      "size": 2865,
+      "type": "file"
+    },
+    {
+      "path": "docs/integrations/mastra.mdx",
+      "size": 2245,
+      "type": "file"
+    },
+    {
+      "path": "docs/integrations/tembo.mdx",
+      "size": 1420,
+      "type": "file"
+    },
+    {
+      "path": "docs/library-owners.mdx",
+      "size": 6395,
+      "type": "file"
+    },
+    {
+      "path": "docs/library-updates.mdx",
+      "size": 2907,
+      "type": "file"
+    },
+    {
+      "path": "docs/openapi-enterprise.json",
+      "size": 24408,
+      "type": "file"
+    },
+    {
+      "path": "docs/openapi.json",
+      "size": 89089,
+      "type": "file"
+    },
+    {
+      "path": "docs/overview.mdx",
+      "size": 1888,
+      "type": "file"
+    },
+    {
+      "path": "docs/plans-pricing.mdx",
+      "size": 64,
+      "type": "file"
+    },
+    {
+      "path": "docs/public/favicon.ico",
+      "size": 1489,
+      "type": "file"
+    },
+    {
+      "path": "docs/public/logo/logo-dark.svg",
+      "size": 3287,
+      "type": "file"
+    },
+    {
+      "path": "docs/public/logo/logo.png",
+      "size": 9380,
+      "type": "file"
+    },
+    {
+      "path": "docs/public/logo/logo.svg",
+      "size": 3287,
+      "type": "file"
+    },
+    {
+      "path": "docs/resources/all-clients.mdx",
+      "size": 32112,
+      "type": "file"
+    },
+    {
+      "path": "docs/resources/developer.mdx",
+      "size": 2500,
+      "type": "file"
+    },
+    {
+      "path": "docs/resources/troubleshooting.mdx",
+      "size": 8462,
+      "type": "file"
+    },
+    {
+      "path": "docs/sdks/ts/commands/get-context.mdx",
+      "size": 3494,
+      "type": "file"
+    },
+    {
+      "path": "docs/sdks/ts/commands/search-library.mdx",
+      "size": 3752,
+      "type": "file"
+    },
+    {
+      "path": "docs/sdks/ts/getting-started.mdx",
+      "size": 3381,
+      "type": "file"
+    },
+    {
+      "path": "docs/security/auth-and-access-control.mdx",
+      "size": 1184,
+      "type": "file"
+    },
+    {
+      "path": "docs/security/best-practices.mdx",
+      "size": 982,
+      "type": "file"
+    },
+    {
+      "path": "docs/security/compliance-and-reporting.mdx",
+      "size": 981,
+      "type": "file"
+    },
+    {
+      "path": "docs/security/data-privacy.mdx",
+      "size": 6520,
+      "type": "file"
+    },
+    {
+      "path": "docs/security/data-safety.mdx",
+      "size": 1034,
+      "type": "file"
+    },
+    {
+      "path": "docs/security/infrastructure.mdx",
+      "size": 1924,
+      "type": "file"
+    },
+    {
+      "path": "docs/security/overview.mdx",
+      "size": 2986,
+      "type": "file"
+    },
+    {
+      "path": "docs/tips.mdx",
+      "size": 1190,
+      "type": "file"
+    },
+    {
+      "path": "eslint.config.js",
+      "size": 1058,
+      "type": "file"
+    },
+    {
+      "path": "gemini-extension.json",
+      "size": 441,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.ar.md",
+      "size": 8399,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.de.md",
+      "size": 12824,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.es.md",
+      "size": 9335,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.fr.md",
+      "size": 13313,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.id-ID.md",
+      "size": 30056,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.it.md",
+      "size": 13039,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.ja.md",
+      "size": 25963,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.ko.md",
+      "size": 11507,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.pt-BR.md",
+      "size": 32702,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.ru.md",
+      "size": 19154,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.tr.md",
+      "size": 13191,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.uk.md",
+      "size": 35270,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.vi.md",
+      "size": 31942,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.zh-CN.md",
+      "size": 8743,
+      "type": "file"
+    },
+    {
+      "path": "i18n/README.zh-TW.md",
+      "size": 10861,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "size": 1936,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/.gitignore",
+      "size": 25,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/CHANGELOG.md",
+      "size": 14991,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/README.md",
+      "size": 3778,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/eslint.config.js",
+      "size": 1388,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/package.json",
+      "size": 1618,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/auth-commands.test.ts",
+      "size": 10940,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/auth-utils.test.ts",
+      "size": 14343,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/installer.test.ts",
+      "size": 4683,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/library-id.test.ts",
+      "size": 1648,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/remove.test.ts",
+      "size": 13872,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/setup.test.ts",
+      "size": 46859,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/skill-list.test.ts",
+      "size": 2307,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/storage-paths.test.ts",
+      "size": 2444,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/update-check.test.ts",
+      "size": 8664,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/__tests__/upgrade-command.test.ts",
+      "size": 10320,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/commands/auth.ts",
+      "size": 8234,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/commands/docs.ts",
+      "size": 7352,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/commands/generate.ts",
+      "size": 18218,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/commands/remove.ts",
+      "size": 15772,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/commands/setup.ts",
+      "size": 17826,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/commands/skill.ts",
+      "size": 33740,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/commands/upgrade.ts",
+      "size": 6080,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/constants.ts",
+      "size": 385,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/index.ts",
+      "size": 2712,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/setup/agents.ts",
+      "size": 9076,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/setup/mcp-writer.ts",
+      "size": 10865,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/setup/templates.ts",
+      "size": 5265,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/types.ts",
+      "size": 5466,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/api.ts",
+      "size": 10226,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/auth.ts",
+      "size": 7077,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/deps.ts",
+      "size": 2867,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/github.ts",
+      "size": 10038,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/ide.ts",
+      "size": 8041,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/installer.ts",
+      "size": 1399,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/library-id.ts",
+      "size": 956,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/logger.ts",
+      "size": 1409,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/parse-input.ts",
+      "size": 634,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/prompts.ts",
+      "size": 4441,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/selectOrInput.ts",
+      "size": 3166,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/skill-name.ts",
+      "size": 863,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/storage-paths.ts",
+      "size": 4045,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/tracking.ts",
+      "size": 360,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/src/utils/update-check.ts",
+      "size": 8333,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/tsconfig.json",
+      "size": 501,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/tsup.config.ts",
+      "size": 352,
+      "type": "file"
+    },
+    {
+      "path": "packages/cli/vitest.config.ts",
+      "size": 175,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/.prettierignore",
+      "size": 97,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/CHANGELOG.md",
+      "size": 10608,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/Dockerfile",
+      "size": 867,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/LICENSE",
+      "size": 1079,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/README.md",
+      "size": 45348,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/eslint.config.js",
+      "size": 1376,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/mcpb/.mcpbignore",
+      "size": 270,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/mcpb/context7.mcpb",
+      "size": 20484,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/mcpb/manifest.json",
+      "size": 1542,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/package.json",
+      "size": 1779,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/prettier.config.mjs",
+      "size": 213,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/schema/context7.json",
+      "size": 4345,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/smithery.yaml",
+      "size": 266,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/index.ts",
+      "size": 25211,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/lib/api.ts",
+      "size": 6015,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/lib/auth/auth-prompt.ts",
+      "size": 3612,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/lib/constants.ts",
+      "size": 1076,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/lib/encryption.ts",
+      "size": 2093,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/lib/jwt.ts",
+      "size": 3877,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/lib/redis.ts",
+      "size": 495,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/lib/sessionStore.ts",
+      "size": 1805,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/lib/types.ts",
+      "size": 1064,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/src/lib/utils.ts",
+      "size": 3404,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/test/certificate.test.ts",
+      "size": 1688,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/test/jwt.test.ts",
+      "size": 6740,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/tsconfig.json",
+      "size": 265,
+      "type": "file"
+    },
+    {
+      "path": "packages/mcp/tsconfig.test.json",
+      "size": 203,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/.prettierignore",
+      "size": 75,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/CHANGELOG.md",
+      "size": 656,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/LICENSE",
+      "size": 1080,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/README.md",
+      "size": 1512,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/__tests__/extension.test.ts",
+      "size": 1825,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/eslint.config.js",
+      "size": 1162,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/extensions/context7.ts",
+      "size": 346,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/lib/api.ts",
+      "size": 2704,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/lib/format.ts",
+      "size": 2162,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/lib/prompts.ts",
+      "size": 4384,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/lib/result.ts",
+      "size": 227,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/lib/tools/query-docs.ts",
+      "size": 899,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/lib/tools/resolve-library-id.ts",
+      "size": 1278,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/lib/types.ts",
+      "size": 655,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/package.json",
+      "size": 1568,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/prompts/c7-docs.md",
+      "size": 587,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/skills/context7-docs/SKILL.md",
+      "size": 2530,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/tsconfig.json",
+      "size": 542,
+      "type": "file"
+    },
+    {
+      "path": "packages/pi/vitest.config.ts",
+      "size": 297,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/CHANGELOG.md",
+      "size": 1492,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/LICENSE",
+      "size": 1079,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/README.md",
+      "size": 2089,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/eslint.config.js",
+      "size": 1350,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/package.json",
+      "size": 1217,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/prettier.config.mjs",
+      "size": 213,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/client.test.ts",
+      "size": 6156,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/client.ts",
+      "size": 3622,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/commands/command.ts",
+      "size": 1013,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/commands/get-context/index.test.ts",
+      "size": 2223,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/commands/get-context/index.ts",
+      "size": 1655,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/commands/get-context/types.ts",
+      "size": 457,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/commands/index.ts",
+      "size": 65,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/commands/search-library/index.test.ts",
+      "size": 1634,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/commands/search-library/index.ts",
+      "size": 1483,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/commands/search-library/types.ts",
+      "size": 260,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/commands/types.ts",
+      "size": 1379,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/error/index.ts",
+      "size": 135,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/http/index.test.ts",
+      "size": 2278,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/http/index.ts",
+      "size": 5451,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/utils/format.ts",
+      "size": 2527,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/src/utils/test-utils.ts",
+      "size": 561,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/tsconfig.json",
+      "size": 690,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/tsup.config.ts",
+      "size": 156,
+      "type": "file"
+    },
+    {
+      "path": "packages/sdk/vitest.config.ts",
+      "size": 591,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/CHANGELOG.md",
+      "size": 1382,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/README.md",
+      "size": 2335,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/eslint.config.js",
+      "size": 1350,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/package.json",
+      "size": 1565,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/agents/context7.ts",
+      "size": 1653,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/agents/index.ts",
+      "size": 70,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/index.test.ts",
+      "size": 7865,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/index.ts",
+      "size": 449,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/prompts/index.ts",
+      "size": 121,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/prompts/system.ts",
+      "size": 3930,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/tools/index.ts",
+      "size": 151,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/tools/query-docs.ts",
+      "size": 2794,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/tools/resolve-library-id.ts",
+      "size": 2613,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/src/tools/types.ts",
+      "size": 204,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/tsconfig.json",
+      "size": 724,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/tsup.config.ts",
+      "size": 395,
+      "type": "file"
+    },
+    {
+      "path": "packages/tools-ai-sdk/vitest.config.ts",
+      "size": 530,
+      "type": "file"
+    },
+    {
+      "path": "plugins/claude/context7/.claude-plugin/plugin.json",
+      "size": 262,
+      "type": "file"
+    },
+    {
+      "path": "plugins/claude/context7/.mcp.json",
+      "size": 196,
+      "type": "file"
+    },
+    {
+      "path": "plugins/claude/context7/README.md",
+      "size": 2611,
+      "type": "file"
+    },
+    {
+      "path": "plugins/claude/context7/agents/docs-researcher.md",
+      "size": 1739,
+      "type": "file"
+    },
+    {
+      "path": "plugins/claude/context7/commands/docs.md",
+      "size": 1148,
+      "type": "file"
+    },
+    {
+      "path": "plugins/claude/context7/skills/context7-mcp/SKILL.md",
+      "size": 2124,
+      "type": "file"
+    },
+    {
+      "path": "plugins/codex/context7/.codex-plugin/plugin.json",
+      "size": 1271,
+      "type": "file"
+    },
+    {
+      "path": "plugins/codex/context7/.mcp.json",
+      "size": 116,
+      "type": "file"
+    },
+    {
+      "path": "plugins/codex/context7/README.md",
+      "size": 2446,
+      "type": "file"
+    },
+    {
+      "path": "plugins/codex/context7/skills/context7-mcp/SKILL.md",
+      "size": 2124,
+      "type": "file"
+    },
+    {
+      "path": "plugins/context7-power/POWER.md",
+      "size": 3184,
+      "type": "file"
+    },
+    {
+      "path": "plugins/context7-power/mcp.json",
+      "size": 94,
+      "type": "file"
+    },
+    {
+      "path": "plugins/copilot/context7/.mcp.json",
+      "size": 196,
+      "type": "file"
+    },
+    {
+      "path": "plugins/copilot/context7/README.md",
+      "size": 2634,
+      "type": "file"
+    },
+    {
+      "path": "plugins/copilot/context7/agents/docs-researcher.agent.md",
+      "size": 1725,
+      "type": "file"
+    },
+    {
+      "path": "plugins/copilot/context7/commands/docs.md",
+      "size": 1115,
+      "type": "file"
+    },
+    {
+      "path": "plugins/copilot/context7/plugin.json",
+      "size": 528,
+      "type": "file"
+    },
+    {
+      "path": "plugins/copilot/context7/skills/context7-mcp/SKILL.md",
+      "size": 2124,
+      "type": "file"
+    },
+    {
+      "path": "plugins/cursor/context7/.cursor/plugin.json",
+      "size": 529,
+      "type": "file"
+    },
+    {
+      "path": "plugins/cursor/context7/README.md",
+      "size": 1727,
+      "type": "file"
+    },
+    {
+      "path": "plugins/cursor/context7/agents/docs-researcher.md",
+      "size": 1725,
+      "type": "file"
+    },
+    {
+      "path": "plugins/cursor/context7/mcp.json",
+      "size": 72,
+      "type": "file"
+    },
+    {
+      "path": "plugins/cursor/context7/rules/use-context7.mdc",
+      "size": 961,
+      "type": "file"
+    },
+    {
+      "path": "plugins/cursor/context7/skills/context7-mcp/SKILL.md",
+      "size": 2124,
+      "type": "file"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "size": 201369,
+      "type": "file"
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "size": 83,
+      "type": "file"
+    },
+    {
+      "path": "prettier.config.mjs",
+      "size": 213,
+      "type": "file"
+    },
+    {
+      "path": "public/context7-icon-green.svg",
+      "size": 1154,
+      "type": "file"
+    },
+    {
+      "path": "public/context7-icon.svg",
+      "size": 1106,
+      "type": "file"
+    },
+    {
+      "path": "public/context7-logo.svg",
+      "size": 3287,
+      "type": "file"
+    },
+    {
+      "path": "public/cover.png",
+      "size": 688329,
+      "type": "file"
+    },
+    {
+      "path": "public/icon.png",
+      "size": 9380,
+      "type": "file"
+    },
+    {
+      "path": "rules/context7-cli.md",
+      "size": 1971,
+      "type": "file"
+    },
+    {
+      "path": "rules/context7-mcp.md",
+      "size": 1308,
+      "type": "file"
+    },
+    {
+      "path": "server.json",
+      "size": 1770,
+      "type": "file"
+    },
+    {
+      "path": "skills/context7-cli/SKILL.md",
+      "size": 2939,
+      "type": "file"
+    },
+    {
+      "path": "skills/context7-cli/references/docs.md",
+      "size": 5125,
+      "type": "file"
+    },
+    {
+      "path": "skills/context7-cli/references/setup.md",
+      "size": 2066,
+      "type": "file"
+    },
+    {
+      "path": "skills/context7-cli/references/skills.md",
+      "size": 3785,
+      "type": "file"
+    },
+    {
+      "path": "skills/context7-mcp/SKILL.md",
+      "size": 2124,
+      "type": "file"
+    },
+    {
+      "path": "skills/find-docs/SKILL.md",
+      "size": 6326,
+      "type": "file"
+    },
+    {
+      "path": "tsconfig.json",
+      "size": 304,
+      "type": "file"
+    }
+  ],
+  "external_ingest": {
+    "enabled": false,
+    "provider": "gitingest"
+  }
+}

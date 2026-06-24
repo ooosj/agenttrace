@@ -26,6 +26,9 @@ class Settings:
     database_url: str = "postgresql://agenthub_user:agenthub_password@localhost:5432/agenthub"
     external_ingest_enabled: bool = False
     github_token: str | None = None
+    # finalize_analysis 전용 — evidence_evaluator와 독립
+    finalize_model_timeout: int = 90          # 환경변수: AGENTTRACE_FINALIZE_MODEL_TIMEOUT
+    finalize_model_max_tokens: int = 8192     # 환경변수: AGENTTRACE_FINALIZE_MODEL_MAX_TOKENS
 
 
 
@@ -93,6 +96,14 @@ def get_settings() -> Settings:
         )
         or "postgresql://agenthub_user:agenthub_password@localhost:5432/agenthub",
         github_token=_get_env("GITHUB_TOKEN", env_values),
+        finalize_model_timeout=int(
+            _get_env("AGENTTRACE_FINALIZE_MODEL_TIMEOUT", env_values, "90")
+            or "90"
+        ),
+        finalize_model_max_tokens=int(
+            _get_env("AGENTTRACE_FINALIZE_MODEL_MAX_TOKENS", env_values, "8192")
+            or "8192"
+        ),
     )
 
 
