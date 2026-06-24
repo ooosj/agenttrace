@@ -74,8 +74,8 @@ def _has_tryable_example(state: AnalysisState, target_paths: list[str]) -> bool:
 def risk_and_followup_planner(state: AnalysisState) -> AnalysisState:
     metadata = state.get("metadata", {})
     readme = state.get("readme", "")
-    evidence = state.get("evidence_signals", [])
-    claims = state.get("claims", [])
+    area_findings = state.get("area_findings", [])
+    evidence_refs = state.get("evidence_refs", [])
 
     risks: list[dict] = [{
         "risk_type": "ANALYSIS_UNCERTAIN",
@@ -90,11 +90,19 @@ def risk_and_followup_planner(state: AnalysisState) -> AnalysisState:
             "summary": "GitHub repository가 archived 상태입니다.",
         })
 
-    if claims and not evidence:
+    confirmed_areas = [af for af in area_findings if af.get("status") == "confirmed"]
+    if area_findings and not evidence_refs:
         risks.append({
-            "risk_type": "CLAIM_WITHOUT_EVIDENCE",
+            "risk_type": "NO_EVIDENCE_REFS",
             "severity": "high",
-            "summary": "README claim은 있으나 구현 근거 파일을 찾지 못했습니다.",
+            "summary": "영역 분석이 수행되었으나 구현 근거 파일을 찾지 못했습니다.",
+        })
+
+    if area_findings and not confirmed_areas:
+        risks.append({
+            "risk_type": "NO_CONFIRMED_AREAS",
+            "severity": "medium",
+            "summary": "확인된(confirmed) 영역이 없어 분석 신뢰도가 낮습니다.",
         })
 
     lower_readme = readme.lower()
@@ -114,13 +122,13 @@ def risk_and_followup_planner(state: AnalysisState) -> AnalysisState:
             "summary": "stars가 낮아 커뮤니티 검증 신호가 약합니다.",
         })
 
-    target_paths = [item["path"] for item in evidence if item.get("path")]
+    target_paths = [ref.get("path") for ref in evidence_refs if ref.get("path")]
     followup_actions: list[dict] = []
 
-    if claims and target_paths:
+    if target_paths:
         followup_actions.append({
             "action": "READ_NOW",
-            "reason": "README claim과 구현 근거가 함께 있으므로 우선 원문 claim을 확인합니다.",
+            "reason": "README와 구현 근거가 함께 있으므로 우선 원문을 확인합니다.",
             "target_paths": ["README.md"],
         })
 
@@ -151,13 +159,13 @@ def risk_and_followup_planner(state: AnalysisState) -> AnalysisState:
         "risk_signals": risks,
         "followup_actions": followup_actions,
         "followup_guide": [
-            {"step": 1, "label": "README claim 확인", "target": "README.md"},
-            {"step": 2, "label": "구현 근거 경로 확인", "target": "evidence_signals[].path"},
+            {"step": 1, "label": "README 확인", "target": "README.md"},
+            {"step": 2, "label": "구현 근거 경로 확인", "target": "evidence_refs[].path"},
             {"step": 3, "label": "위험 신호 확인", "target": "risk_signals"},
         ],
         "follow_up_guide": {
-            "ko": "README claim, evidence path, risk signal 순서로 확인하세요.",
-            "en": "Review README claims, evidence paths, and risk signals in order.",
+            "ko": "README, evidence path, risk signal 순서로 확인하세요.",
+            "en": "Review README, evidence paths, and risk signals in order.",
         },
     }
 

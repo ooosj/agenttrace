@@ -119,7 +119,7 @@ def test_catalog_node_empty_tree():
 
 def test_planner_uses_catalog_for_target_paths():
     """file_catalog가 있으면 source 카테고리 파일이 target_paths에 포함된다."""
-    from agenttrace.agents.analysis.nodes.analysis_planner import analysis_planner
+    from agenttrace.agents.analysis.nodes.legacy.analysis_planner import analysis_planner
 
     state = {
         "run_id": "test-run",
@@ -147,7 +147,7 @@ def test_planner_uses_catalog_for_target_paths():
 
 def test_planner_includes_critical_configs_in_every_task():
     """critical_config_paths는 태스크 수와 무관하게 모든 target_paths에 포함된다."""
-    from agenttrace.agents.analysis.nodes.analysis_planner import analysis_planner
+    from agenttrace.agents.analysis.nodes.legacy.analysis_planner import analysis_planner
 
     state = {
         "run_id": "test-run",

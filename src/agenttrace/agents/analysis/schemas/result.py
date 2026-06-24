@@ -147,6 +147,14 @@ class RiskSignal(BaseModel):
     severity: Literal["low", "medium", "high"] = "low"
 
 
+class AreaExplorationResult(BaseModel):
+    """area_explorer 노드가 LLM에서 구조화 출력으로 받는 결과 스키마."""
+    area_findings: list[AreaFinding] = Field(default_factory=list)
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    agent_type: str = "Unknown"
+    tech_stack_summary: TechStackSummary | LocalizedText | None = None
+
+
 class AnalysisResult(BaseModel):
     analysis_status: Literal["completed", "completed_with_limitations", "insufficient_evidence", "uncertain_classification"]
     agent_type: Literal["MCP", "Skill", "Eval", "ToolUse", "Framework", "Other", "Unknown"] | None = None

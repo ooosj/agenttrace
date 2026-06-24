@@ -176,9 +176,34 @@ def _compat_result_json(analysis_result: dict[str, Any], input_req: AnalysisInpu
             "limitation": "; ".join(verdict.get("limitations", [])) or None,
         })
 
+    if not claims:
+        evidence_paths = [
+            ref.get("path")
+            for ref in analysis_result.get("evidence_refs", [])
+            if ref.get("path")
+        ]
+        for area in analysis_result.get("area_findings", []):
+            area_status = area.get("status", "unconfirmed")
+            evidence_status = (
+                "SUPPORTED"
+                if area_status == "confirmed"
+                else "PARTIALLY_SUPPORTED"
+                if area_status == "partially_confirmed"
+                else "INSUFFICIENT_EVIDENCE"
+            )
+            claim_text = area.get("summary") or area.get("area_name") or area.get("area_id") or ""
+            limitations = area.get("limitations", [])
+            claims.append({
+                "claim_text": claim_text,
+                "evidence_status": evidence_status,
+                "confidence_level": "0.8" if area_status == "confirmed" else "0.5",
+                "supporting_evidence": evidence_paths,
+                "limitation": "; ".join(limitations) or None,
+            })
+
     limitations = analysis_result.get("analysis_limitations", {})
     agent_type = agent_type_map.get(analysis_result.get("agent_type"), "Unknown")
-    if agent_type == "Unknown":
+    if agent_type == "UNKNOWN":
         text = " ".join([
             input_req.repository.full_name,
             input_req.repository.description or "",
@@ -186,11 +211,11 @@ def _compat_result_json(analysis_result: dict[str, Any], input_req: AnalysisInpu
             input_req.readme_text or "",
         ]).lower()
         if "harness" in text or "eval" in text or "benchmark" in text:
-            agent_type = "Eval"
+            agent_type = "EVAL_HARNESS"
         elif "mcp" in text:
-            agent_type = "MCP"
+            agent_type = "MCP_SERVER"
         elif "skill" in text:
-            agent_type = "Skill"
+            agent_type = "SKILL"
 
     return {
         "agent_type": agent_type,
@@ -284,16 +309,13 @@ async def run_pipeline_async(req: AnalysisRequest) -> None:
             {
                 "run_id": run_id,
                 "analysis_request": input_req.model_dump(mode="json"),
-                "claims": [],
                 "evidence_signals": [],
                 "risk_signals": [],
                 "quality_warnings": [],
                 "quality_errors": [],
-                "task_results": [],
-                "task_traces": [],
             },
         )
-        print("LANGGRAPH RESULT:", {k: v for k, v in result.items() if k != "content_chunks"})
+        print("LANGGRAPH RESULT:", result)
         payload = result.get("callback_payload") or _failure_payload(req, RuntimeError("missing callback payload"))
         if payload.get("analysis_result") is not None:
             payload["result_json"] = _compat_result_json(payload["analysis_result"], input_req)

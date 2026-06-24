@@ -4,33 +4,24 @@ import concurrent.futures
 import json
 import re
 import time
+import shutil
+from pathlib import Path
 
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from agenttrace.agents.analysis.schemas.result import (
     AnalysisResult,
-    AreaFinding,
     COMMON_ANALYSIS_AREAS,
-    EvidenceRef,
     ReportSection,
     MERMAID_STARTERS,
 )
 from agenttrace.agents.analysis.state import AnalysisState
 from agenttrace.config import get_settings
 from agenttrace.logging_config import get_logger
-from agenttrace.models import build_openai_analysis_model, build_openai_finalize_model
+from agenttrace.models import build_openai_finalize_model
 
 logger = get_logger(__name__)
-
-
-class BatchAnalysisResult(BaseModel):
-    area_findings: list[AreaFinding] = Field(default_factory=list)
-    evidence_refs: list[EvidenceRef] = Field(default_factory=list)
-
-
-class ReportSynthesisResult(BaseModel):
-    report_sections: list[ReportSection] = Field(default_factory=list)
 
 
 class ReportBodySection(BaseModel):
@@ -78,7 +69,6 @@ def _generate_mermaid_for_section(
         code = result.mermaid_code
         if "```" in code:
             code = re.sub(r"```(mermaid)?", "", code).strip()
-        # 1회 retry (invalid syntax인 경우만)
         if not validate_mermaid_syntax(code):
             retry_result = structured_model.invoke(prompt.invoke({
                 "section_id": section_id,
@@ -99,13 +89,13 @@ def _generate_mermaid_for_section(
 
 def validate_mermaid_syntax(mermaid_code: str) -> bool:
     lines = [
-        line.strip() 
-        for line in mermaid_code.strip().split("\n") 
+        line.strip()
+        for line in mermaid_code.strip().split("\n")
         if line.strip() and not line.strip().startswith("%%")
     ]
     if not lines:
         return False
-    
+
     header = lines[0]
     valid_headers = [
         r"^graph\s+(TD|LR|TB|BT|RL)$",
@@ -117,7 +107,7 @@ def validate_mermaid_syntax(mermaid_code: str) -> bool:
     ]
     if not any(re.match(h, header, re.IGNORECASE) for h in valid_headers):
         return False
-    
+
     for line in lines[1:]:
         if re.search(r"[-=]{4,}>", line):
             return False
@@ -125,7 +115,6 @@ def validate_mermaid_syntax(mermaid_code: str) -> bool:
             if line.count(open_b) != line.count(close_b):
                 return False
     return True
-
 
 
 REPORT_SECTION_NAMES = (
@@ -150,10 +139,13 @@ def finalize_analysis(state: AnalysisState) -> AnalysisState:
     log.info("시작")
     synthesis = state.get("synthesis", {})
 
-    evidence_refs = state.get("evidence_refs") or _build_evidence_refs(state)
-    _batch_start = time.perf_counter()
-    area_findings = state.get("area_findings") or _build_area_findings(state, evidence_refs)
-    batch_wall_ms = int((time.perf_counter() - _batch_start) * 1000)
+    area_findings = state.get("area_findings", [])
+    evidence_refs = state.get("evidence_refs", [])
+    evidence_signals = state.get("evidence_signals", [])
+
+    if not area_findings:
+        area_findings = _build_fallback_area_findings()
+
     _synthesis_start = time.perf_counter()
     if state.get("report_sections"):
         report_sections = state.get("report_sections")
@@ -162,38 +154,15 @@ def finalize_analysis(state: AnalysisState) -> AnalysisState:
     else:
         report_sections, mermaid_ms = _build_report_sections(state, area_findings, evidence_refs)
         synthesis_ms = int((time.perf_counter() - _synthesis_start) * 1000) - mermaid_ms
-    
-    # Map claim_id to evidence_signal_ids from task results
-    claim_signals = {}
-    for task_res in state.get("task_results", []):
-        for verdict in task_res.get("claim_verdicts", []):
-            cid = verdict.get("claim_id")
-            sids = verdict.get("evidence_signal_ids", [])
-            if cid and sids:
-                if cid not in claim_signals:
-                    claim_signals[cid] = []
-                for sid in sids:
-                    if sid not in claim_signals[cid]:
-                        claim_signals[cid].append(sid)
-                        
-    updated_claims = []
-    for claim in state.get("claims", []):
-        cid = claim.get("claim_id") or claim.get("id")
-        claim_copy = dict(claim)
-        if cid in claim_signals:
-            claim_copy["evidence_signal_ids"] = claim_signals[cid]
-        updated_claims.append(claim_copy)
 
     result = AnalysisResult.model_validate({
-        "analysis_status": synthesis.get("analysis_status", "insufficient_evidence"),
-        "agent_type": synthesis.get("agent_type", "Unknown"),
+        "analysis_status": synthesis.get("analysis_status", "completed_with_limitations"),
+        "agent_type": state.get("agent_type") or synthesis.get("agent_type", "Unknown"),
         "tech_stack_summary": synthesis.get("tech_stack_summary"),
         "area_findings": area_findings,
         "evidence_refs": evidence_refs,
         "report_sections": report_sections,
-        "analysis_claims": updated_claims,
-        "evidence_signals": state.get("evidence_signals", []),
-        "evidence_task_results": state.get("task_results", []),
+        "evidence_signals": evidence_signals,
         "risk_signals": state.get("risk_signals", []),
         "follow_up_guide": state.get("follow_up_guide") or {
             "ko": "README와 근거 경로를 순서대로 확인하세요.",
@@ -206,8 +175,6 @@ def finalize_analysis(state: AnalysisState) -> AnalysisState:
         },
     })
 
-    import shutil
-    from pathlib import Path
     local_repo_dir_str = state.get("local_repo_dir")
     if local_repo_dir_str:
         local_repo_dir = Path(local_repo_dir_str)
@@ -220,7 +187,6 @@ def finalize_analysis(state: AnalysisState) -> AnalysisState:
         area_findings=len(result.area_findings),
         evidence_refs=len(result.evidence_refs),
         status=result.analysis_status,
-        batch_wall_ms=batch_wall_ms,
         synthesis_ms=synthesis_ms,
         mermaid_ms=mermaid_ms,
         duration_ms=int((time.perf_counter() - _t) * 1000),
@@ -228,71 +194,7 @@ def finalize_analysis(state: AnalysisState) -> AnalysisState:
     return {"final_result": result.model_dump()}
 
 
-
-def _build_evidence_refs(state: AnalysisState) -> list[dict]:
-    refs: list[dict] = []
-
-    # ReAct 모드: evidence_signals에서 evidence_refs 생성
-    signals = state.get("evidence_signals", [])
-    if signals:
-        for idx, sig in enumerate(signals, start=1):
-            path = sig.get("path") or "unknown"
-            refs.append(
-                {
-                    "id": f"ref-{idx}",
-                    "source_type": _source_type(path),
-                    "path": path,
-                    "symbol": None,
-                    "description": f"{path}에서 확인한 ReAct 탐색 근거",
-                    "chunk_id": sig.get("chunk_id") or "",
-                    "line_start": sig.get("line_start"),
-                    "line_end": sig.get("line_end"),
-                    "content_excerpt": sig.get("content_excerpt") or "",
-                    "content_hash": sig.get("content_hash") or "",
-                }
-            )
-        if refs:
-            return refs
-
-    # Fallback: content_chunks에서 생성 (기존 로직)
-    for idx, chunk in enumerate(state.get("content_chunks", [])[:5], start=1):
-        path = chunk.get("file_path") or chunk.get("path") or "unknown"
-        content = chunk.get("content") or ""
-        excerpt = content.strip().splitlines()[0] if content.strip() else None
-        refs.append(
-            {
-                "id": f"ref-{idx}",
-                "source_type": _source_type(path),
-                "path": path,
-                "symbol": chunk.get("symbol"),
-                "description": f"{path}에서 확인한 정적 분석 근거",
-                "chunk_id": chunk.get("chunk_id"),
-                "line_start": chunk.get("line_start") or chunk.get("start_line"),
-                "line_end": chunk.get("line_end") or chunk.get("end_line"),
-                "content_excerpt": excerpt,
-                "content_hash": chunk.get("content_hash"),
-            }
-        )
-    if refs:
-        return refs
-    return [
-        {
-            "id": "ref-limited-1",
-            "source_type": "doc",
-            "path": "README.md",
-            "symbol": None,
-            "description": "소스 본문이 부족하여 README와 파일 목록 중심으로 제한 분석함",
-            "chunk_id": None,
-            "line_start": None,
-            "line_end": None,
-            "content_excerpt": None,
-            "content_hash": None,
-        }
-    ]
-
-
-def _build_mock_area_findings(evidence_refs: list[dict]) -> list[dict]:
-    ref_id = evidence_refs[0]["id"] if evidence_refs else "ref-limited-1"
+def _build_fallback_area_findings() -> list[dict]:
     return [
         {
             "area_id": area_id,
@@ -303,7 +205,7 @@ def _build_mock_area_findings(evidence_refs: list[dict]) -> list[dict]:
                 {
                     "content": f"{area_name} 분석은 수집된 파일 근거를 기준으로 제한적으로 구성되었습니다.",
                     "type": "inference",
-                    "evidence_refs": [ref_id],
+                    "evidence_refs": [],
                 }
             ],
             "limitations": ["정적 분석은 런타임 동작, 성능, 운영 안정성을 보장하지 않습니다."],
@@ -311,215 +213,6 @@ def _build_mock_area_findings(evidence_refs: list[dict]) -> list[dict]:
         }
         for area_id, area_name in COMMON_ANALYSIS_AREAS
     ]
-
-
-def _build_area_findings(state: AnalysisState, evidence_refs: list[dict]) -> list[dict]:
-    try:
-        settings = get_settings()
-        if not settings.openai_api_key:
-            return _build_mock_area_findings(evidence_refs)
-
-        readme = state.get("readme") or ""
-        file_tree = state.get("file_tree") or []
-        content_chunks = state.get("content_chunks") or []
-
-        file_tree_str = json.dumps(file_tree, indent=2, ensure_ascii=False)
-
-        formatted_chunks = []
-        # ReAct 모드: evidence_signals를 코드 근거로 사용
-        signals = state.get("evidence_signals", [])
-        if signals:
-            for sig in signals:
-                path = sig.get("path") or "unknown"
-                sig_type = sig.get("signal_type", "")
-                excerpt = sig.get("content_excerpt") or ""
-                line_start = sig.get("line_start") or 1
-                line_end = sig.get("line_end") or 1
-                formatted_chunks.append(
-                    f"--- File: {path} (Lines {line_start}-{line_end}) [Type: {sig_type}] ---\n"
-                    f"{excerpt}\n"
-                )
-        # Fallback: content_chunks가 있으면 사용
-        if not formatted_chunks:
-            for chunk in content_chunks:
-                path = chunk.get("file_path") or chunk.get("path") or "unknown"
-                content = chunk.get("content") or ""
-                line_start = chunk.get("line_start") or chunk.get("start_line") or 1
-                line_end = chunk.get("line_end") or chunk.get("end_line") or 1
-                chunk_id = chunk.get("chunk_id") or "unknown"
-                formatted_chunks.append(
-                    f"--- File: {path} (Lines {line_start}-{line_end}) [Chunk ID: {chunk_id}] ---\n"
-                    f"{content}\n"
-                )
-        chunks_text = "\n".join(formatted_chunks)
-        if len(chunks_text) > 100000:
-            chunks_text = chunks_text[:100000] + "\n... [TRUNCATED] ..."
-
-        batches_definition = [
-            {
-                "name": "Batch 1 (프로젝트 이해 묶음)",
-                "areas": [
-                    ("project-purpose", "프로젝트 목적과 주요 기능"),
-                    ("examples-and-tests", "예제·테스트·확장 지점"),
-                ],
-            },
-            {
-                "name": "Batch 2 (핵심 내부 구조 묶음)",
-                "areas": [
-                    ("execution-flow", "진입점과 핵심 실행 흐름"),
-                    ("architecture-and-modules", "아키텍처와 모듈 관계"),
-                    ("agent-and-llm", "Agent·LLM 핵심 로직"),
-                    ("tools-and-integrations", "Tool·외부 서비스 연동"),
-                    ("state-and-storage", "상태·메모리·데이터 저장"),
-                ],
-            },
-            {
-                "name": "Batch 3 (실행과 적용 묶음)",
-                "areas": [
-                    ("configuration-and-deployment", "설정·실행·배포 방법"),
-                ],
-            }
-        ]
-
-        all_area_findings = []
-        all_evidence_refs = []
-
-        model = build_openai_finalize_model()
-        structured_model = model.with_structured_output(BatchAnalysisResult)
-
-        system_prompt = (
-            "You are an expert AI software analyst. Your task is to analyze a repository based on its README, file tree, "
-            "and source code chunks, and output analysis for specific areas in a structured format.\n"
-            "CRITICAL RULES:\n"
-            "1. You must only analyze the requested areas: {areas_list_text}.\n"
-            "2. Do not include findings or analyze any areas other than the requested ones in this batch.\n"
-            "3. For each analyzed area, produce an 'AreaFinding' object containing the status, summary, list of findings, "
-            "limitations, and unresolved questions.\n"
-            "   - The status must be one of: 'confirmed', 'partially_confirmed', 'unconfirmed', 'not_applicable'.\n"
-            "   - For each finding in findings, the finding 'type' must be either 'fact' or 'inference'.\n"
-            "   - Each finding must reference one or more unique evidence IDs from the 'evidence_refs' list in the 'evidence_refs' field.\n"
-            "4. In the 'evidence_refs' list, output the concrete source code/config/doc files that support your findings. "
-            "Ensure every EvidenceRef has a unique ID (e.g. 'ref-purpose-1', 'ref-exec-2'), clear path, and description.\n"
-            "   - IMPORTANT: If you include line numbers (line_start or line_end) in EvidenceRef, they must be 1-based integers (>= 1). Do not use 0 or negative numbers. If line numbers are not available or not applicable, omit them or set them to null/None.\n"
-            "5. The output must be a single structured JSON matching the BatchAnalysisResult schema."
-        )
-
-        human_prompt = (
-            "Requested areas to analyze in this batch:\n"
-            "{areas_detail_text}\n\n"
-            "Repository README:\n"
-            "{readme}\n\n"
-            "Repository File Tree:\n"
-            "{file_tree}\n\n"
-            "Source Code Chunks:\n"
-            "{chunks_text}\n"
-        )
-
-        # executor 진입 전 prompt 1회 생성 (기존 for 루프에서 매번 생성하던 부분)
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", human_prompt),
-        ])
-
-        def _invoke_single_batch(batch_def: dict) -> tuple[list, list]:
-            areas_list_text = ", ".join(
-                [f"'{area_id}' ({area_name})" for area_id, area_name in batch_def["areas"]]
-            )
-            areas_detail_text = "\n".join(
-                [f"- {area_id}: {area_name}" for area_id, area_name in batch_def["areas"]]
-            )
-            prompt_value = prompt.invoke({
-                "areas_list_text": areas_list_text,
-                "areas_detail_text": areas_detail_text,
-                "readme": readme[:30000],
-                "file_tree": file_tree_str[:20000],
-                "chunks_text": chunks_text,
-            })
-            batch_res = structured_model.invoke(prompt_value)
-            return batch_res.area_findings, batch_res.evidence_refs
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(_invoke_single_batch, b) for b in batches_definition]
-            for future in concurrent.futures.as_completed(futures):
-                findings, refs = future.result()
-                all_area_findings.extend(findings)
-                all_evidence_refs.extend(refs)
-
-        # De-duplicate evidence_refs by ID and normalize/sanitize line numbers
-        unique_refs_dict = {}
-        for ref in all_evidence_refs:
-            ref_dict = ref.model_dump() if hasattr(ref, "model_dump") else dict(ref)
-            ref_id = ref_dict.get("id")
-            if not ref_id:
-                continue
-
-            # Sanitize line numbers just in case LLM outputs <= 0
-            for field in ["line_start", "line_end"]:
-                val = ref_dict.get(field)
-                if val is not None and (not isinstance(val, int) or val < 1):
-                    ref_dict[field] = None
-
-            # Ensure line_start <= line_end
-            start = ref_dict.get("line_start")
-            end = ref_dict.get("line_end")
-            if start is not None and end is not None and start > end:
-                ref_dict["line_start"] = end
-
-            if ref_id not in unique_refs_dict:
-                unique_refs_dict[ref_id] = ref_dict
-
-        # Collect and merge area findings
-        findings_dict = {}
-        for af in all_area_findings:
-            af_dict = af.model_dump() if hasattr(af, "model_dump") else dict(af)
-            findings_dict[af_dict["area_id"]] = af_dict
-
-        # Build final findings and ensure references exist, create fallbacks for missing ones
-        final_findings = []
-        for area_id, area_name in COMMON_ANALYSIS_AREAS:
-            if area_id in findings_dict:
-                af_dict = findings_dict[area_id]
-                # Validate and heal evidence references
-                for finding in af_dict.get("findings", []):
-                    valid_refs = []
-                    for ref_id in finding.get("evidence_refs", []):
-                        if ref_id not in unique_refs_dict:
-                            # Create fallback EvidenceRef to prevent schema validation failure
-                            unique_refs_dict[ref_id] = {
-                                "id": ref_id,
-                                "source_type": "other",
-                                "path": "unknown",
-                                "description": f"자동 생성된 {area_name} 분석 근거 참조",
-                                "symbol": None,
-                                "chunk_id": None,
-                                "line_start": None,
-                                "line_end": None,
-                                "content_excerpt": None,
-                                "content_hash": None,
-                            }
-                        valid_refs.append(ref_id)
-                    finding["evidence_refs"] = valid_refs
-                final_findings.append(af_dict)
-            else:
-                final_findings.append({
-                    "area_id": area_id,
-                    "area_name": area_name,
-                    "status": "unconfirmed",
-                    "summary": "분석 중 누락됨",
-                    "findings": [],
-                    "limitations": ["LLM 분석 출력 누락"],
-                    "unresolved_questions": [],
-                })
-
-        # Update evidence_refs in place
-        evidence_refs.clear()
-        evidence_refs.extend(list(unique_refs_dict.values()))
-
-        return final_findings
-
-    except Exception as exc:
-        logger.warning(f"LLM 3-batch analysis failed, falling back to mock: {exc}")
-        return _build_mock_area_findings(evidence_refs)
 
 
 def _build_mock_report_sections(area_findings: list[dict]) -> tuple[list[dict], int]:
@@ -628,7 +321,6 @@ def _build_report_sections(state: AnalysisState, area_findings: list[dict], evid
                     "mermaid_diagram": None,
                 })
 
-        # 섭션 4·5 Mermaid 병렬 생성
         area_summary_map = {af.get("area_id"): af.get("summary", "") for af in area_findings}
 
         _mermaid_t = time.perf_counter()
@@ -666,23 +358,8 @@ def _default_mermaid() -> str:
     )
 
 
-def _source_type(path: str) -> str:
-    lowered = path.lower()
-    if lowered.endswith((".md", ".rst", ".txt")):
-        return "doc"
-    if lowered.endswith((".json", ".yaml", ".yml", ".toml", ".ini", ".xml")):
-        return "config"
-    if lowered.endswith((".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".go", ".rs")):
-        return "code"
-    return "other"
-
-
 def _compact_area_findings(area_findings: list[dict]) -> str:
-    """Report synthesis용 compact payload.
-
-    전달 대상: _build_report_sections의 LLM 입력 prompt에만 사용.
-    저장 대상인 AnalysisResult의 area_findings는 원본 그대로 유지.
-    """
+    """Report synthesis용 compact payload."""
     compact = []
     for af in area_findings:
         compact.append({
@@ -700,11 +377,7 @@ def _compact_area_findings(area_findings: list[dict]) -> str:
 
 
 def _compact_evidence_refs(evidence_refs: list[dict]) -> str:
-    """Report synthesis용 compact payload: id/path/description만 포함.
-
-    content_excerpt, content_hash 등 대용량 필드 제외.
-    저장 대상인 AnalysisResult의 evidence_refs는 원본 그대로 유지.
-    """
+    """Report synthesis용 compact payload: id/path/description만 포함."""
     compact = [
         {
             "id": r.get("id"),

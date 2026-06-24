@@ -11,7 +11,6 @@ from agenttrace.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-
 def build_result_json(state: AnalysisState) -> dict:
     return state.get("final_result", {})
 
@@ -34,18 +33,11 @@ def persist_analysis(state: AnalysisState) -> AnalysisState:
             "title": "AgentTrace 기술 분석 보고서",
             "body_markdown": report_markdown,
         },
-        "harness_relevance": state.get("harness_relevance", {}),
-        "harness_capabilities": state.get("harness_capabilities", {}),
-        "negative_evidence": state.get("negative_evidence", []),
-        "followup_questions": state.get("followup_questions", []),
         "trace": {
             "run_id": state.get("run_id"),
             "analysis_version": "analysis-v2",
             "input_manifest": state.get("input_manifest", {}),
             "precheck_result": state.get("precheck_result", {}),
-            "claims": state.get("claims", []),
-            "analysis_plan": state.get("analysis_plan", {}),
-            "task_traces": state.get("task_traces", []),
             "final_result": state.get("final_result", {}),
             "quality_gate_result": state.get("quality_gate_result", {}),
         },
@@ -61,5 +53,4 @@ def persist_analysis(state: AnalysisState) -> AnalysisState:
     log.info("완료", duration_ms=int((time.perf_counter() - _t) * 1000))
     return {
         "callback_payload": payload,
-        "persisted_analysis": payload,
     }

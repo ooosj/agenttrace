@@ -1,22 +1,22 @@
 from agenttrace.agents.analysis.nodes.analysis_precheck import analysis_precheck
-from agenttrace.agents.analysis.nodes.analysis_planner import analysis_planner
-from agenttrace.agents.analysis.nodes.claim_analyzer import claim_analyzer
-from agenttrace.agents.analysis.nodes.content_indexer import content_indexer
-from agenttrace.agents.analysis.nodes.chunk_embedder import chunk_embedder
-from agenttrace.agents.analysis.nodes.content_preprocessor import content_preprocessor
-from agenttrace.agents.analysis.nodes.evidence_evaluator import evidence_evaluator
-from agenttrace.agents.analysis.nodes.evidence_scout import evidence_scout
-from agenttrace.agents.analysis.nodes.finalize_task import finalize_task
+from agenttrace.agents.analysis.nodes.legacy.analysis_planner import analysis_planner
+from agenttrace.agents.analysis.nodes.legacy.claim_analyzer import claim_analyzer
+from agenttrace.agents.analysis.nodes.legacy.content_indexer import content_indexer
+from agenttrace.agents.analysis.nodes.legacy.chunk_embedder import chunk_embedder
+from agenttrace.agents.analysis.nodes.legacy.content_preprocessor import content_preprocessor
+from agenttrace.agents.analysis.nodes.legacy.evidence_evaluator import evidence_evaluator
+from agenttrace.agents.analysis.nodes.legacy.evidence_scout import evidence_scout
+from agenttrace.agents.analysis.nodes.legacy.finalize_task import finalize_task
 from agenttrace.agents.analysis.nodes.persist_analysis import persist_analysis
 from agenttrace.agents.analysis.nodes.finalize_analysis import (
     finalize_analysis,
     validate_mermaid_syntax,
 )
 from agenttrace.agents.analysis.nodes.quality_gate import quality_gate
-from agenttrace.agents.analysis.nodes.repository_synthesizer import repository_synthesizer
-from agenttrace.agents.analysis.nodes.request_builder import request_builder
+from agenttrace.agents.analysis.nodes.legacy.repository_synthesizer import repository_synthesizer
+from agenttrace.agents.analysis.nodes.legacy.request_builder import request_builder
 import pytest
-from agenttrace.agents.analysis.nodes.task_result_merge import task_result_merge
+from agenttrace.agents.analysis.nodes.legacy.task_result_merge import task_result_merge
 
 
 @pytest.fixture(autouse=True)
@@ -316,6 +316,42 @@ def test_finalize_analysis_builds_schema_valid_result():
     assert quality_gate({**state, **result})["quality_gate_result"]["critical_errors"] == []
 
 
+def test_finalize_analysis_uses_area_explorer_agent_type_when_synthesis_lacks_it():
+    state = {
+        "synthesis": {"analysis_status": "completed"},
+        "agent_type": "ToolUse",
+        "area_findings": [
+            {
+                "area_id": area_id,
+                "area_name": area_name,
+                "status": "confirmed",
+                "summary": "요약",
+                "findings": [],
+                "limitations": [],
+                "unresolved_questions": [],
+            }
+            for area_id, area_name in [
+                ("project-purpose", "프로젝트 목적과 주요 기능"),
+                ("execution-flow", "진입점과 핵심 실행 흐름"),
+                ("architecture-and-modules", "아키텍처와 모듈 관계"),
+                ("agent-and-llm", "Agent·LLM 핵심 로직"),
+                ("tools-and-integrations", "Tool·외부 서비스 연동"),
+                ("state-and-storage", "상태·메모리·데이터 저장"),
+                ("configuration-and-deployment", "설정·실행·배포 방법"),
+                ("examples-and-tests", "예제·테스트·확장 지점"),
+            ]
+        ],
+        "evidence_refs": [],
+        "evidence_signals": [],
+        "risk_signals": [],
+        "analysis_limitations": {"missing_inputs": [], "truncated_inputs": [], "notes": []},
+    }
+
+    result = finalize_analysis(state)
+
+    assert result["final_result"]["agent_type"] == "ToolUse"
+
+
 def test_finalize_analysis_builds_document_contract_result():
     state = {
         "synthesis": {
@@ -327,13 +363,37 @@ def test_finalize_analysis_builds_document_contract_result():
                 "dependencies": ["langgraph"],
             },
         },
-        "content_chunks": [
+        "area_findings": [
             {
+                "area_id": area_id,
+                "area_name": area_name,
+                "status": "confirmed",
+                "summary": "요약",
+                "findings": [],
+                "limitations": [],
+                "unresolved_questions": [],
+            }
+            for area_id, area_name in [
+                ("project-purpose", "프로젝트 목적과 주요 기능"),
+                ("execution-flow", "진입점과 핵심 실행 흐름"),
+                ("architecture-and-modules", "아키텍처와 모듈 관계"),
+                ("agent-and-llm", "Agent·LLM 핵심 로직"),
+                ("tools-and-integrations", "Tool·외부 서비스 연동"),
+                ("state-and-storage", "상태·메모리·데이터 저장"),
+                ("configuration-and-deployment", "설정·실행·배포 방법"),
+                ("examples-and-tests", "예제·테스트·확장 지점"),
+            ]
+        ],
+        "evidence_refs": [
+            {
+                "id": "ref-1",
+                "source_type": "code",
+                "path": "src/server.py",
+                "description": "server implementation",
                 "chunk_id": "chunk-0001",
-                "file_path": "src/server.py",
-                "content": "def create_app():\n    return app\n",
                 "line_start": 1,
                 "line_end": 2,
+                "content_excerpt": "def create_app():\n    return app\n",
                 "content_hash": "sha256:" + "1" * 64,
             }
         ],
@@ -446,31 +506,9 @@ def test_finalize_analysis_with_llm_success(monkeypatch):
     """synthesis가 ReportBodyResult, Mermaid가 MermaidResult로 분리 동작."""
     import agenttrace.agents.analysis.nodes.finalize_analysis as fa_module
     from agenttrace.agents.analysis.nodes.finalize_analysis import (
-        BatchAnalysisResult, ReportBodyResult, ReportBodySection, MermaidResult,
+        ReportBodyResult, ReportBodySection, MermaidResult,
     )
-    from agenttrace.agents.analysis.schemas.result import AreaFinding
-
-    class FakeBatchModel:
-        def invoke(self, prompt_value):
-            return BatchAnalysisResult(
-                area_findings=[
-                    AreaFinding(
-                        area_id=area_id, area_name=area_name,
-                        status="confirmed", summary="요약", findings=[]
-                    )
-                    for area_id, area_name in [
-                        ("project-purpose", "프로젝트 목적과 주요 기능"),
-                        ("execution-flow", "진입점과 핵심 실행 흐름"),
-                        ("architecture-and-modules", "아키텔쳐와 모듈 관계"),
-                        ("agent-and-llm", "Agent·LLM 핵심 로직"),
-                        ("tools-and-integrations", "Tool·외부 서비스 연동"),
-                        ("state-and-storage", "상태·메모리·데이터 저장"),
-                        ("configuration-and-deployment", "설정·실행·배포 방법"),
-                        ("examples-and-tests", "예제·테스트·확장 지점"),
-                    ]
-                ],
-                evidence_refs=[]
-            )
+    from agenttrace.agents.analysis.schemas.result import COMMON_ANALYSIS_AREAS
 
     class FakeBodyModel:
         def invoke(self, prompt_value):
@@ -489,8 +527,6 @@ def test_finalize_analysis_with_llm_success(monkeypatch):
 
     class FakeModel:
         def with_structured_output(self, schema):
-            if schema == BatchAnalysisResult:
-                return FakeBatchModel()
             if schema == ReportBodyResult:
                 return FakeBodyModel()
             if schema == MermaidResult:
@@ -512,7 +548,20 @@ def test_finalize_analysis_with_llm_success(monkeypatch):
     state = {
         "readme": "Project Readme",
         "synthesis": {"analysis_status": "completed", "agent_type": "Unknown"},
-        "claims": [], "evidence_signals": [], "task_results": [],
+        "area_findings": [
+            {
+                "area_id": area_id,
+                "area_name": area_name,
+                "status": "confirmed",
+                "summary": "요약",
+                "findings": [],
+                "limitations": [],
+                "unresolved_questions": [],
+            }
+            for area_id, area_name in COMMON_ANALYSIS_AREAS
+        ],
+        "evidence_refs": [],
+        "evidence_signals": [],
         "risk_signals": [],
         "analysis_limitations": {"missing_inputs": [], "truncated_inputs": [], "notes": []},
     }
@@ -531,19 +580,9 @@ def test_finalize_analysis_with_llm_mermaid_retry(monkeypatch):
     """Mermaid 1회 invalid → retry → valid 반환 경로."""
     import agenttrace.agents.analysis.nodes.finalize_analysis as fa_module
     from agenttrace.agents.analysis.nodes.finalize_analysis import (
-        BatchAnalysisResult, ReportBodyResult, ReportBodySection, MermaidResult,
+        ReportBodyResult, ReportBodySection, MermaidResult,
     )
-    from agenttrace.agents.analysis.schemas.result import AreaFinding
-
-    class FakeBatchModel:
-        def invoke(self, prompt_value):
-            return BatchAnalysisResult(
-                area_findings=[
-                    AreaFinding(area_id="execution-flow", area_name="진입점과 핵심 실행 흐름",
-                                status="confirmed", summary="요약", findings=[])
-                ],
-                evidence_refs=[]
-            )
+    from agenttrace.agents.analysis.schemas.result import COMMON_ANALYSIS_AREAS
 
     class FakeBodyModel:
         def invoke(self, prompt_value):
@@ -572,8 +611,6 @@ def test_finalize_analysis_with_llm_mermaid_retry(monkeypatch):
 
     class FakeModel:
         def with_structured_output(self, schema):
-            if schema == BatchAnalysisResult:
-                return FakeBatchModel()
             if schema == ReportBodyResult:
                 return FakeBodyModel()
             if schema == MermaidResult:
@@ -595,7 +632,20 @@ def test_finalize_analysis_with_llm_mermaid_retry(monkeypatch):
     state = {
         "readme": "Project Readme",
         "synthesis": {"analysis_status": "completed", "agent_type": "Unknown"},
-        "claims": [], "evidence_signals": [], "task_results": [],
+        "area_findings": [
+            {
+                "area_id": area_id,
+                "area_name": area_name,
+                "status": "confirmed",
+                "summary": "요약",
+                "findings": [],
+                "limitations": [],
+                "unresolved_questions": [],
+            }
+            for area_id, area_name in COMMON_ANALYSIS_AREAS
+        ],
+        "evidence_refs": [],
+        "evidence_signals": [],
         "risk_signals": [],
         "analysis_limitations": {"missing_inputs": [], "truncated_inputs": [], "notes": []},
     }
@@ -615,19 +665,9 @@ def test_finalize_analysis_with_llm_mermaid_fail_after_retry(monkeypatch):
     """Mermaid 2회 모두 invalid → None 반환 (섭션에서 mermaid_diagram=None)."""
     import agenttrace.agents.analysis.nodes.finalize_analysis as fa_module
     from agenttrace.agents.analysis.nodes.finalize_analysis import (
-        BatchAnalysisResult, ReportBodyResult, ReportBodySection, MermaidResult,
+        ReportBodyResult, ReportBodySection, MermaidResult,
     )
-    from agenttrace.agents.analysis.schemas.result import AreaFinding
-
-    class FakeBatchModel:
-        def invoke(self, prompt_value):
-            return BatchAnalysisResult(
-                area_findings=[
-                    AreaFinding(area_id="execution-flow", area_name="진입점",
-                                status="confirmed", summary="요약", findings=[])
-                ],
-                evidence_refs=[]
-            )
+    from agenttrace.agents.analysis.schemas.result import COMMON_ANALYSIS_AREAS
 
     class FakeBodyModel:
         def invoke(self, prompt_value):
@@ -647,8 +687,6 @@ def test_finalize_analysis_with_llm_mermaid_fail_after_retry(monkeypatch):
 
     class FakeModel:
         def with_structured_output(self, schema):
-            if schema == BatchAnalysisResult:
-                return FakeBatchModel()
             if schema == ReportBodyResult:
                 return FakeBodyModel()
             if schema == MermaidResult:
@@ -670,7 +708,20 @@ def test_finalize_analysis_with_llm_mermaid_fail_after_retry(monkeypatch):
     state = {
         "readme": "Project Readme",
         "synthesis": {"analysis_status": "completed", "agent_type": "Unknown"},
-        "claims": [], "evidence_signals": [], "task_results": [],
+        "area_findings": [
+            {
+                "area_id": area_id,
+                "area_name": area_name,
+                "status": "confirmed",
+                "summary": "요약",
+                "findings": [],
+                "limitations": [],
+                "unresolved_questions": [],
+            }
+            for area_id, area_name in COMMON_ANALYSIS_AREAS
+        ],
+        "evidence_refs": [],
+        "evidence_signals": [],
         "risk_signals": [],
         "analysis_limitations": {"missing_inputs": [], "truncated_inputs": [], "notes": []},
     }
@@ -720,35 +771,6 @@ def test_generate_mermaid_for_section_returns_none_on_failure(monkeypatch):
         readme="# Test", area_summary=""
     )
     assert result is None
-
-
-
-
-
-from agenttrace.agents.analysis.nodes.finalize_analysis import _build_area_findings
-
-def test_build_area_findings_invokes_all_three_batches(monkeypatch):
-    """3개 배치가 모두 호출되는지 확인 (call_count 기반, timing assertion 없음)."""
-    import agenttrace.agents.analysis.nodes.finalize_analysis as fa_module
-    from unittest.mock import MagicMock
-
-    mock_model = MagicMock()
-    mock_model.with_structured_output.return_value = mock_model
-    mock_model.invoke.return_value = MagicMock(area_findings=[], evidence_refs=[])
-    monkeypatch.setattr(fa_module, "build_openai_finalize_model", lambda: mock_model)
-    monkeypatch.setattr(fa_module, "get_settings", lambda: MagicMock(openai_api_key="test"))
-
-    state = {"readme": "# Test", "file_tree": [], "content_chunks": []}
-    _build_area_findings(state, [{"id": "ref-1", "path": "README.md",
-                                   "description": "d", "source_type": "doc",
-                                   "symbol": None, "chunk_id": None,
-                                   "line_start": None, "line_end": None,
-                                   "content_excerpt": None, "content_hash": None}])
-
-    # 배치 3개가 모두 호출됨
-    assert mock_model.invoke.call_count == 3
-
-
 from agenttrace.agents.analysis.nodes.finalize_analysis import (
     _compact_area_findings,
     _compact_evidence_refs,

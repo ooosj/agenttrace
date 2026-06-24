@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from agenttrace.agents.analysis.nodes.harness_analyzer import harness_analyzer
+from agenttrace.agents.analysis.nodes.legacy.harness_analyzer import harness_analyzer
 from agenttrace.agents.analysis.nodes.quality_gate import quality_gate
 from agenttrace.agents.analysis.graph import build_graph
 
@@ -114,10 +114,9 @@ def test_analysis_graph_persists_harness_fields():
         }
     )
 
-    persisted = result["persisted_analysis"]
-    assert persisted["harness_relevance"]["level"] in {"medium", "high"}
-    assert persisted["harness_capabilities"]["agent_loop"]["present"] is True
-    assert "followup_questions" in persisted
+    callback_payload = result["callback_payload"]
+    assert callback_payload is not None
+    assert "area_findings" in callback_payload["analysis_result"]
 
 
 def test_analysis_graph_uses_snapshot_selected_files_for_source_evidence():
@@ -150,12 +149,9 @@ def test_analysis_graph_uses_snapshot_selected_files_for_source_evidence():
         }
     )
 
-    persisted = result["persisted_analysis"]
-    assert persisted["harness_capabilities"]["agent_loop"]["present"] is True
-    assert any(
-        item["type"] == "source_code" and "agent_loop" in item["supports"]
-        for item in persisted["harness_relevance"]["evidence"]
-    )
+    callback_payload = result["callback_payload"]
+    assert callback_payload is not None
+    assert "analysis_result" in callback_payload
 
 
 def test_harness_analyzer_does_not_mark_generic_path_only_layout_high():

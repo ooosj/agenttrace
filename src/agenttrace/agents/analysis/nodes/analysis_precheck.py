@@ -6,10 +6,10 @@ from agenttrace.agents.analysis.state import AnalysisState
 def analysis_precheck(state: AnalysisState) -> AnalysisState:
     has_readme = bool((state.get("readme") or "").strip())
     has_file_tree = bool(state.get("file_tree"))
-    has_chunks = bool(state.get("content_chunks"))
+    has_repo_map = bool(state.get("repo_map_render") or state.get("definition_ranks"))
     missing_inputs = list(state.get("missing_inputs", []))
     can_analyze = has_readme or has_file_tree
-    analysis_mode = "normal" if has_chunks else "limited"
+    analysis_mode = "normal" if has_repo_map else "limited"
     limitations = {
         "missing_inputs": missing_inputs,
         "truncated_inputs": [],
@@ -23,7 +23,7 @@ def analysis_precheck(state: AnalysisState) -> AnalysisState:
             "can_analyze": can_analyze,
             "has_readme": has_readme,
             "has_file_tree": has_file_tree,
-            "has_source_chunks": has_chunks,
+            "has_repo_map": has_repo_map,
         },
         "analysis_mode": analysis_mode,
         "analysis_limitations": limitations,

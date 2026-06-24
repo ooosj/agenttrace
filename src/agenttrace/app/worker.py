@@ -126,13 +126,10 @@ async def run_analysis_pipeline(job: dict[str, Any]) -> dict[str, Any]:
             {
                 "run_id": run_id,
                 "analysis_request": input_req.model_dump(mode="json"),
-                "claims": [],
                 "evidence_signals": [],
                 "risk_signals": [],
                 "quality_warnings": [],
                 "quality_errors": [],
-                "task_results": [],
-                "task_traces": [],
             },
         )
         

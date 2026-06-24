@@ -43,7 +43,7 @@ def content_indexer(state: AnalysisState, *, store: ContentIndexStore | None = N
             if not content and state.get("local_repo_dir") and chunk.get("file_path"):
                 try:
                     local_dir = Path(state["local_repo_dir"])
-                    from agenttrace.agents.analysis.nodes.chunk_embedder import _chunk_content
+                    from agenttrace.agents.analysis.nodes.legacy.chunk_embedder import _chunk_content
                     content = _chunk_content(chunk, local_dir, {})
                 except Exception:
                     content = ""

@@ -68,53 +68,32 @@ class AnalysisState(TypedDict, total=False):
     missing_inputs: list[str]
     input_manifest: dict
     analysis_mode: str
-    content_chunks: list[dict]
-    chunk_index: dict
-    content_index_request: dict
-    content_index_result: dict
-    embedding_candidates: list[dict]
-    chunk_embedding_rows: list[dict]
-    chunk_embedding_result: dict
     precheck_result: dict
     analysis_limitations: dict
     synthesis: dict
 
+    # Area-based analysis output (area_explorer → finalize_analysis)
+    area_findings: list[dict]          # area_explorer가 생성한 8개 AreaFinding
+    evidence_refs: list[dict]          # area_explorer가 생성한 EvidenceRef 목록
+    evidence_signals: list[dict]        # area_explorer가 수집한 코드 근거 신호
+    agent_type: str                    # area_explorer가 판별한 agent_type
+
     # Analysis result
     status: AnalysisStatus
-    agent_type: AgentType
-    relevance_score: float
     classification_reason: str
 
-    # Evidence-first analysis objects
-    claims: Annotated[list[dict], operator.add]
-    evidence_tasks: list[dict]
-    analysis_plan: dict
-    current_task_id: str | None
-    next_task_id: str | None
-    task_results: list[dict]
-    task_traces: list[dict]
-    selected_chunks: list[dict]
-    search_attempt: dict
-    task_parts: list[dict]
-    task_part_results: list[dict]
-    pending_task_result: dict
-    pending_evidence_signals: list[dict]
-    evidence_signals: Annotated[list[dict], operator.add]
-    risk_signals: Annotated[list[dict], operator.add]
+    # Risk & followup (risk_and_followup 노드 출력)
+    risk_signals: list[dict]
     followup_actions: list[dict]
     followup_guide: list[dict]
     follow_up_guide: dict
-    harness_relevance: dict
-    harness_capabilities: dict
-    negative_evidence: Annotated[list[dict], operator.add]
-    followup_questions: list[str]
 
     # Quality / persistence
+    report_sections: list[dict]
     quality_warnings: Annotated[list[str], operator.add]
     quality_errors: Annotated[list[str], operator.add]
-    persisted_analysis: dict
-    final_result: dict
     quality_gate_result: dict
+    final_result: dict
     callback_payload: dict
     retry_count: int
     error_message: str

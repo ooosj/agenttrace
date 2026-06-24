@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from agenttrace.agents.analysis.nodes.evidence_scout import evidence_scout
+from agenttrace.agents.analysis.nodes.legacy.evidence_scout import evidence_scout
 from agenttrace.agents.analysis.nodes.quality_gate import quality_gate
 from agenttrace.agents.analysis.nodes.risk_and_followup import risk_and_followup_planner
 
@@ -32,7 +32,7 @@ def _chunk_index(paths: list[str]) -> dict:
 
 
 def test_evidence_scout_selects_chunks_for_target_paths():
-    """target_paths에 속한 청크가 선택된다."""
+    """ReAct 모드에서는 target_paths를 구조 지도에 포함하고 청크는 선선택하지 않는다."""
     state = {
         "run_id": "test",
         "current_task_id": "task-001",
@@ -49,11 +49,15 @@ def test_evidence_scout_selects_chunks_for_target_paths():
         },
         "claims": [{"claim_id": "c1", "claim_text": "MCP server with tools"}],
         "chunk_index": _chunk_index(["src/server.py", "docs/index.md", "tests/test_server.py"]),
+        "repo_map": {
+            "files": {"src/server.py": {"definitions": ["McpServer"], "references": ["tool"]}},
+            "definition_ranks": {"src/server.py::McpServer": 1.0},
+        },
     }
     result = evidence_scout(state)
-    selected = result["selected_chunks"]
-    assert len(selected) >= 1
-    assert all(c["file_path"] == "src/server.py" for c in selected)
+    assert result["selected_chunks"] == []
+    assert "src/server.py" in result["search_attempt"]["structure_map"]
+    assert result["search_attempt"]["mode"] == "react"
 
 
 def test_evidence_scout_falls_back_to_token_match_when_no_path_match():
@@ -108,51 +112,11 @@ def test_evidence_scout_returns_empty_chunks_when_no_chunk_index():
 # quality_gate — final_result 경로 (현재 파이프라인)
 # ---------------------------------------------------------------------------
 
-def _minimal_final_result(
-    *,
-    status: str = "completed",
-    claim_ids: list[str] | None = None,
-    task_ids: list[str] | None = None,
-) -> dict:
-    """테스트용 최소 final_result dict — AnalysisResult 스키마 기준."""
-    claim_ids = claim_ids or ["c1"]
-    task_ids = task_ids or ["task-001"]
-    signal_id = "sig-001"
+def _minimal_final_result(*, status: str = "completed") -> dict:
     return {
         "analysis_status": status,
-        "agent_type": "MCP",
-        "analysis_claims": [
-            {"claim_id": cid, "claim_text": "test claim", "confidence": 0.8, "source": "README"}
-            for cid in claim_ids
-        ],
-        "evidence_signals": [
-            {
-                "signal_id": signal_id,
-                "signal_type": "FILE_PATH",
-                "file_path": "src/server.py",
-                "path": "src/server.py",
-                "summary": "test",
-                "confidence": 0.9,
-            }
-        ],
-        "evidence_task_results": [
-            {
-                "task_id": tid,
-                "status": "RESOLVED",
-                "evidence_signal_ids": [signal_id],
-                "claim_verdicts": [
-                    {
-                        "claim_id": cid,
-                        "verdict": "SUPPORTED",
-                        "confidence": 0.8,
-                        "reason": "test evidence",
-                        "evidence_signal_ids": [signal_id],
-                    }
-                    for cid in claim_ids
-                ],
-            }
-            for tid in task_ids
-        ],
+        "area_findings": [],
+        "evidence_refs": [],
         "analysis_limitations": {
             "missing_inputs": [],
             "truncated_inputs": [],
@@ -161,52 +125,13 @@ def _minimal_final_result(
     }
 
 
-
-def _plan(task_ids: list[str], required: bool = True) -> dict:
-    return {
-        "plan_id": "plan-001",
-        "repository_id": "repo-1",
-        "tasks": [
-            {"task_id": tid, "claims": ["c1"], "target_paths": [], "required": required, "status": "PENDING"}
-            for tid in task_ids
-        ],
-    }
-
-
 def test_quality_gate_passes_valid_final_result():
     state = {
         "run_id": "test",
         "final_result": _minimal_final_result(),
-        "analysis_plan": _plan(["task-001"]),
     }
     result = quality_gate(state)
     assert result["quality_gate_result"]["critical_errors"] == []
-
-
-def test_quality_gate_blocks_missing_required_task():
-    state = {
-        "run_id": "test",
-        "final_result": _minimal_final_result(task_ids=["task-999"]),  # task-001 없음
-        "analysis_plan": _plan(["task-001"]),
-    }
-    result = quality_gate(state)
-    errors = result["quality_gate_result"]["critical_errors"]
-    assert errors
-    # schema 유효 시 missing task 에러, schema 오류 시 schema 에러 중 하나여야 함
-    assert any("task-001" in e or "task" in e.lower() or "schema" in e.lower() for e in errors)
-
-
-def test_quality_gate_blocks_unknown_evidence_signal():
-    final = _minimal_final_result()
-    # task result가 존재하지 않는 signal_id 참조
-    final["evidence_task_results"][0]["evidence_signal_ids"] = ["sig-UNKNOWN"]
-    state = {
-        "run_id": "test",
-        "final_result": final,
-        "analysis_plan": _plan(["task-001"]),
-    }
-    result = quality_gate(state)
-    assert result["quality_gate_result"]["critical_errors"]
 
 
 # ---------------------------------------------------------------------------
@@ -217,13 +142,22 @@ def test_risk_and_followup_planner_returns_followup_actions():
     state = {
         "run_id": "test",
         "agent_type": "MCP",
-        "evidence_signals": [
-            {"claim_id": "c1", "path": "src/server.py", "confidence": 0.9}
+        "area_findings": [
+            {
+                "area_id": "project-purpose",
+                "area_name": "프로젝트 목적",
+                "status": "confirmed",
+                "summary": "MCP server with tools",
+                "findings": [],
+            }
         ],
-        "claims": [{"claim_id": "c1", "claim_text": "MCP server with tools"}],
+        "evidence_refs": [
+            {"id": "e1", "source_type": "code", "path": "src/server.py", "description": "impl"}
+        ],
         "file_tree": [{"path": "src/server.py"}, {"path": "README.md"}],
         "risk_signals": [],
         "followup_actions": [],
     }
     result = risk_and_followup_planner(state)
-    assert "followup_actions" in result or "risk_signals" in result
+    assert "risk_signals" in result
+    assert "followup_actions" in result

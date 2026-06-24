@@ -31,7 +31,6 @@ def main() -> None:
             "trigger": "NEW_REPO",
             "repository_snapshot": snapshot,
             "output_path": args.out,
-            "claims": [],
             "evidence_signals": [],
             "risk_signals": [],
             "quality_warnings": [],

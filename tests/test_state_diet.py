@@ -8,11 +8,11 @@ from uuid import uuid4
 import pytest
 
 from agenttrace.agents.analysis.nodes.collect_inputs import collect_inputs
-from agenttrace.agents.analysis.nodes.content_preprocessor import content_preprocessor
-from agenttrace.agents.analysis.nodes.evidence_evaluator import evidence_evaluator
+from agenttrace.agents.analysis.nodes.legacy.content_preprocessor import content_preprocessor
+from agenttrace.agents.analysis.nodes.legacy.evidence_evaluator import evidence_evaluator
 from agenttrace.agents.analysis.nodes.finalize_analysis import finalize_analysis
 from agenttrace.agents.analysis.nodes.critical_error_handler import critical_error_handler
-from agenttrace.agents.analysis.nodes.harness_analyzer import harness_analyzer
+from agenttrace.agents.analysis.nodes.legacy.harness_analyzer import harness_analyzer
 from agenttrace.agents.analysis.schemas.input import AnalysisInputRequest
 from agenttrace.config import get_settings
 
