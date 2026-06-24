@@ -160,6 +160,13 @@ def _build_fallback_evidence_refs(state: AnalysisState) -> list[dict]:
             catalog.get(path, {}).get("category", ""),
         ]).lower()
         val = 0
+        
+        category = catalog.get(path, {}).get("category") or data.get("category") or ""
+        if category == "source":
+            val += 200
+        elif category == "critical_config":
+            val += 50
+            
         if lower.endswith((".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java")):
             val += 50
         if any(token in refs for token in ("mcp", "server", "tool", "agent", "sdk", "client", "api", "search", "context", "resolve")):
@@ -168,10 +175,12 @@ def _build_fallback_evidence_refs(state: AnalysisState) -> list[dict]:
             val += 20
         if lower.endswith((".md", ".mdx")):
             val += 10
+            
         if "__tests__" in lower or lower.endswith((".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx", "_test.py")):
-            val -= 60
-        elif "test" in lower or "example" in lower:
-            val -= 20
+            val -= 500
+        elif "test" in lower or "example" in lower or "mock" in lower or "fixture" in lower:
+            val -= 300
+            
         return (-val, path)
 
     refs: list[dict] = []
@@ -358,7 +367,7 @@ def area_explorer(state: AnalysisState) -> AnalysisState:
 
         result = agent.invoke(
             {"messages": [{"role": "user", "content": user_prompt}]},
-            config={"recursion_limit": 50},
+            config={"recursion_limit": 30},
         )
 
         structured_response = result.get("structured_response")
