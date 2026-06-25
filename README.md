@@ -11,12 +11,17 @@
 ## 포함된 MVP 노드
 
 ```text
-1. collect_snapshot
-2. analyzer
-3. evidence_scout
-4. risk_and_followup_planner
-5. quality_gate
-6. persist_analysis
+1. collect_inputs
+2. extract_mentions
+3. build_file_catalog
+4. build_repo_map
+5. analysis_precheck
+6. area_explorer
+7. risk_and_followup
+8. finalize_analysis
+9. quality_gate
+10. critical_error_handler
+11. persist_analysis
 ```
 
 ## 설치
