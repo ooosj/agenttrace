@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://agenthub_user:agenthub_password@agenthub-postgres:5432/agenthub
+      - AGENTS_CALLBACK_URL=http://host.docker.internal:8080/api/v1/internal/analysis/callback
     networks:
       - agenthub-backend_default
     restart: unless-stopped
@@ -22,6 +23,7 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://agenthub_user:agenthub_password@agenthub-postgres:5432/agenthub
+      - AGENTS_CALLBACK_URL=http://host.docker.internal:8080/api/v1/internal/analysis/callback
     networks:
       - agenthub-backend_default
     restart: unless-stopped
