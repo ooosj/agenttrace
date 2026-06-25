@@ -14,6 +14,7 @@ class Settings:
     embedding_model: str = "text-embedding-3-small"
     embedding_dimension: int = 1536
     repo_ingest_base_url: str = "https://gitingest.com"
+    repo_ingest_timeout: int = 1200
     agents_callback_url: str = "http://localhost:8080/api/v1/internal/analysis/callback"
     repo_ingest_host_header: str | None = None
     enable_github_url_summary: bool = False
@@ -45,6 +46,10 @@ def get_settings() -> Settings:
             "https://gitingest.com",
         )
         or "https://gitingest.com",
+        repo_ingest_timeout=int(
+            _get_env("AGENTTRACE_REPO_INGEST_TIMEOUT", env_values, "1200")
+            or "1200"
+        ),
         agents_callback_url=_get_env(
             "AGENTS_CALLBACK_URL",
             env_values,

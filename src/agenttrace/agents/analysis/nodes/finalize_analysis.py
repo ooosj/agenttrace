@@ -75,7 +75,8 @@ def _generate_mermaid_for_section(
              "You are a technical diagram expert. Generate a valid Mermaid diagram. "
              "Output ONLY raw mermaid syntax (no markdown code blocks). "
              "Use: flowchart TD/LR, graph TD/LR, sequenceDiagram, or classDiagram. "
-             "Keep it concise (5-15 nodes). Double-quote labels with special characters."),
+             "Keep it concise (5-15 nodes). Double-quote labels with special characters. "
+             "All node labels and diagram text MUST be written in English, even when the report body is Korean."),
             ("human",
              "Section {section_id}: {section_name}\n\nContext:\n{context}\n\n"
              "Generate a Mermaid diagram for this section."),

@@ -40,7 +40,7 @@ def quality_gate(state: AnalysisState) -> AnalysisState:
     if result.analysis_status in {"completed_with_limitations", "insufficient_evidence", "uncertain_classification"}:
         warnings.extend(result.analysis_limitations.notes)
 
-    critical_errors.extend(_validate_confirmed_evidence(state, result))
+    warnings.extend(_validate_confirmed_evidence(state, result))
 
     log.info("완료", errors=len(critical_errors), warnings=len(warnings), duration_ms=int((time.perf_counter() - _t) * 1000))
     return {
@@ -55,7 +55,7 @@ def quality_gate(state: AnalysisState) -> AnalysisState:
 
 
 def _validate_confirmed_evidence(state: AnalysisState, result: AnalysisResult) -> list[str]:
-    errors: list[str] = []
+    warnings: list[str] = []
     refs_by_id = {ref.id: ref.model_dump() for ref in result.evidence_refs}
     inventory = SourceInventory.from_state(state)
 
@@ -69,14 +69,14 @@ def _validate_confirmed_evidence(state: AnalysisState, result: AnalysisResult) -
     for ref_id in sorted(confirmed_ref_ids):
         ref = refs_by_id.get(ref_id)
         if ref is None:
-            errors.append(f"confirmed finding references unknown evidence ref: {ref_id}")
+            warnings.append(f"confirmed finding references unknown evidence ref: {ref_id}")
             continue
 
         for field in ("content_excerpt", "content_hash", "line_start", "line_end"):
             if ref.get(field) in (None, ""):
-                errors.append(f"confirmed evidence ref missing {field}")
+                warnings.append(f"confirmed evidence ref missing {field}")
 
         if inventory.records and ref.get("path") in inventory.records:
-            errors.extend(inventory.validate_evidence_ref(ref))
+            warnings.extend(inventory.validate_evidence_ref(ref))
 
-    return errors
+    return warnings

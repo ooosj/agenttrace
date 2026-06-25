@@ -23,7 +23,7 @@ def fetch_repo_digest(full_name: str) -> dict[str, Any]:
         request.add_header("Host", settings.repo_ingest_host_header)
 
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=settings.repo_ingest_timeout) as response:
             body = response.read().decode("utf-8")
     except HTTPError as exc:
         raise RepoIngestError(f"Repo ingest API returned HTTP {exc.code}.") from exc

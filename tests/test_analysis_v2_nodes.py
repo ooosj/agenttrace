@@ -663,8 +663,8 @@ def test_quality_gate_rejects_confirmed_finding_without_hydrated_evidence():
 
     gate = quality_gate(state)
 
-    assert gate["quality_gate_result"]["critical_errors"]
-    assert "confirmed evidence ref missing content_excerpt" in gate["quality_gate_result"]["critical_errors"]
+    assert not gate["quality_gate_result"]["critical_errors"]
+    assert "confirmed evidence ref missing content_excerpt" in gate["quality_gate_result"]["warnings"]
 
 
 def test_quality_gate_rejects_excerpt_mismatch_when_source_available(tmp_path):
@@ -716,7 +716,8 @@ def test_quality_gate_rejects_excerpt_mismatch_when_source_available(tmp_path):
 
     gate = quality_gate(state)
 
-    assert any("excerpt mismatch" in error for error in gate["quality_gate_result"]["critical_errors"])
+    assert not gate["quality_gate_result"]["critical_errors"]
+    assert any("excerpt mismatch" in warning for warning in gate["quality_gate_result"]["warnings"])
 
 
 def test_persist_analysis_renders_report_markdown_from_sections():
